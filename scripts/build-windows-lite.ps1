@@ -65,7 +65,19 @@ try {
     Invoke-Native $msbuildPath $nativeArguments
     $outputPath = Join-Path $repoRoot "src/Engineer.Lite.Windows/bin/x64/$Configuration/net10.0-windows10.0.26100.0/win-x64"
     if ($Portable) {
-        $outputPath = Join-Path $outputPath 'publish'
+        $publishPath = Join-Path $outputPath 'publish'
+        # WinUI generates these after the managed build; dotnet Publish omits them.
+        foreach ($resource in @('Инженер Lite.pri', 'App.xbf', 'Views/MainWindow.xbf')) {
+            $sourcePath = Join-Path $outputPath $resource
+            if (-not (Test-Path $sourcePath)) {
+                throw "Отсутствует необходимый ресурс WinUI: $resource."
+            }
+            $destinationPath = Join-Path $publishPath $resource
+            New-Item -ItemType Directory -Force -Path (Split-Path $destinationPath -Parent) | Out-Null
+            Copy-Item -Path $sourcePath -Destination $destinationPath -Force
+        }
+        Copy-Item -Path (Join-Path $outputPath 'Assets') -Destination $publishPath -Recurse -Force
+        $outputPath = $publishPath
     }
     if (-not (Test-Path (Join-Path $outputPath 'Инженер Lite.exe'))) {
         throw 'Build завершился, но ожидаемый WinUI executable отсутствует.'
