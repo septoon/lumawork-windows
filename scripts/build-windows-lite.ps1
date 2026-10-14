@@ -3,7 +3,8 @@
 param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Debug',
-    [switch]$UpdateLocks
+    [switch]$UpdateLocks,
+    [switch]$Portable
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,13 +52,21 @@ try {
         "-p:RestoreLockedMode=$lockedRestore", '--logger', 'trx;LogFileName=core.trx',
         '--results-directory', $testResultsPath
     )
-    Invoke-Native $msbuildPath @(
-        'src/Engineer.Lite.Windows/Engineer.Lite.Windows.csproj', '/restore', '/t:Build',
+    $nativeTarget = if ($Portable) { 'Publish' } else { 'Build' }
+    $nativeArguments = @(
+        'src/Engineer.Lite.Windows/Engineer.Lite.Windows.csproj', '/restore', "/t:$nativeTarget",
         "/p:Configuration=$Configuration", '/p:Platform=x64', "/p:RestoreLockedMode=$lockedRestore",
         '/p:AppxPackageSigningEnabled=false', '/p:GenerateAppxPackageOnBuild=false',
         '/p:ContinuousIntegrationBuild=true', "/bl:$artifactsPath/windows-lite-build.binlog", '/nologo'
     )
+    if ($Portable) {
+        $nativeArguments += @('/p:WindowsPackageType=None', '/p:EnableMsixTooling=false')
+    }
+    Invoke-Native $msbuildPath $nativeArguments
     $outputPath = Join-Path $repoRoot "src/Engineer.Lite.Windows/bin/x64/$Configuration/net10.0-windows10.0.26100.0/win-x64"
+    if ($Portable) {
+        $outputPath = Join-Path $outputPath 'publish'
+    }
     if (-not (Test-Path (Join-Path $outputPath 'Engineer.Lite.Windows.exe'))) {
         throw 'Build завершился, но ожидаемый WinUI executable отсутствует.'
     }

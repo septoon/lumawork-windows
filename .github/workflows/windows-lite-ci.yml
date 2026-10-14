@@ -48,12 +48,12 @@ jobs:
           msbuild-architecture: x64
       - name: Test core and build WinUI
         shell: pwsh
-        run: ./scripts/build-windows-lite.ps1 -Configuration Debug
+        run: ./scripts/build-windows-lite.ps1 -Configuration Release -Portable
       - name: Upload build and diagnostics
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: windows-lite-debug-x64-${{ github.run_number }}
+          name: windows-lite-portable-x64-${{ github.run_number }}
           path: artifacts/
           if-no-files-found: warn
           retention-days: 7

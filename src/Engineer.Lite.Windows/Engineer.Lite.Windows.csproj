@@ -28,6 +28,6 @@
     <Content Include="Assets/*.png" />
     <None Remove="appsettings.json" />
     <Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
-    <ProjectCapability Include="Msix" />
+    <ProjectCapability Include="Msix" Condition="'$(WindowsPackageType)' != 'None'" />
   </ItemGroup>
 </Project>
