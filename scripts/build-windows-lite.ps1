@@ -67,7 +67,7 @@ try {
     if ($Portable) {
         $outputPath = Join-Path $outputPath 'publish'
     }
-    if (-not (Test-Path (Join-Path $outputPath 'Engineer.Lite.Windows.exe'))) {
+    if (-not (Test-Path (Join-Path $outputPath 'Инженер Lite.exe'))) {
         throw 'Build завершился, но ожидаемый WinUI executable отсутствует.'
     }
     $artifactOutputPath = Join-Path $artifactsPath 'windows-lite'

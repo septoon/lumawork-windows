@@ -6,7 +6,12 @@
     <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <RootNamespace>Engineer.Lite.Windows</RootNamespace>
+    <AssemblyName>Инженер Lite</AssemblyName>
+    <AssemblyTitle>Инженер Lite</AssemblyTitle>
+    <Product>Инженер Lite</Product>
+    <FileVersion>0.1.0.2</FileVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/AppIcon.ico</ApplicationIcon>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -26,6 +31,7 @@
   <ItemGroup>
     <Manifest Include="$(ApplicationManifest)" />
     <Content Include="Assets/*.png" />
+    <Content Include="Assets/AppIcon.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Remove="appsettings.json" />
     <Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
     <ProjectCapability Include="Msix" Condition="'$(WindowsPackageType)' != 'None'" />

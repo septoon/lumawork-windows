@@ -13,6 +13,7 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         Title = "Инженер Lite";
+        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
         AppWindow.Resize(new SizeInt32(1280, 820));
 
         foreach (var section in LiteNavigation.Sections)
