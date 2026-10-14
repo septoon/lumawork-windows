@@ -31,7 +31,7 @@
   <ItemGroup>
     <Manifest Include="$(ApplicationManifest)" />
     <Content Include="Assets/*.png" />
-    <Content Include="Assets/AppIcon.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Update="Assets/AppIcon.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Remove="appsettings.json" />
     <Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
     <ProjectCapability Include="Msix" Condition="'$(WindowsPackageType)' != 'None'" />
