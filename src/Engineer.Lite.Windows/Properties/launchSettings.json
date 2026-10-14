@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "EngineerLite": {
+      "commandName": "MsixPackage"
+    }
+  }
+}

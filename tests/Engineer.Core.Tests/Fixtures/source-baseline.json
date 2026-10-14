@@ -1,0 +1,41 @@
+{
+  "capturedOn": "2026-10-14",
+  "sourceCheckout": "LumaWork",
+  "head": "2fbbc5f",
+  "includesUncommittedSource": true,
+  "buildDependency": false,
+  "files": [
+    {
+      "path": "LumaWork/LumaWork/AppSupport/AppConfig.swift",
+      "sha256": "7710f7a4aaf68aa6f280d20f02ae0f1f9f87c01e527419d665e26397aacc098f"
+    },
+    {
+      "path": "LumaWork/LumaWork/GsmReportFeature.swift",
+      "sha256": "60b108dd391a2778b3ec0c255aaec0859a9d38522b880ca35171254ed0898856"
+    },
+    {
+      "path": "deploy/lumawork-api/backend/src/server.ts",
+      "sha256": "24e8b212b9aac8aa155702b6f646da814fa6e78c428667b0e4d24446c039ffc1"
+    },
+    {
+      "path": "deploy/lumawork-api/backend/src/gsmReports.ts",
+      "sha256": "2222af6e717e760c67e06b16ad5136aca0e8dcb0a2a0fb10f3611f47b58caf3e"
+    },
+    {
+      "path": "deploy/lumawork-api/backend/src/v2Writes.ts",
+      "sha256": "d3466df0975d1b91492ffcb948702e33402c1064b7a303b9b33344a598f67eae"
+    },
+    {
+      "path": "deploy/lumawork-api/generator/fill_report.py",
+      "sha256": "1d5a754ea76037abb32e5245590886cf95415d113f071d9190d09b7837e73fbd"
+    },
+    {
+      "path": "LumaWork/LumaWork/ClosedRequestsFeature/ClosedRequestsXLSXRequestsParser.swift",
+      "sha256": "5461f682e19f1cb02bf968478968bc23d34f04c8142497a2587dc158ef8817bb"
+    },
+    {
+      "path": "LumaWork/LumaWork/ClosedRequestsFeature/ClosedRequestsIncrementalSync.swift",
+      "sha256": "33c04de91a81394806598da723d46bc885671b5927d515cd5ca38fdaa261ce39"
+    }
+  ]
+}
