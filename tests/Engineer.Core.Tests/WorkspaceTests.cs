@@ -653,6 +653,62 @@ public sealed class WorkspaceTests
         Assert.Equal(1, puts);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ImportDuringInitialOrSwitchedAccountCacheReadPreservesUnreadArchive(bool switchAccount)
+    {
+        using var http = Client(request => Task.FromResult(ReadResponse(request)));
+        var store = new MemoryStore();
+        var seed = Create(http, store);
+        await seed.SetSessionAsync(App("a"), So("so1"), false);
+        Assert.True(await seed.ImportClosedAsync(Preview("OLD")));
+        var archiveKey = Assert.Single(store.Documents).Key;
+        var controller = Create(http, store);
+        if (switchAccount) await controller.SetSessionAsync(App("a"), So("so2"), false);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reads = 0;
+        store.BeforeLoad = async key =>
+        {
+            if (key == archiveKey && ++reads == 1) { entered.TrySetResult(); await release.Task; }
+        };
+        var loading = controller.SetSessionAsync(App("a"), So("so1"), false);
+        await entered.Task;
+        try
+        {
+            Assert.Empty(controller.ClosedRequests);
+            Assert.True(await controller.ImportClosedAsync(Preview("NEW")));
+            Assert.Equal(new[] { "NEW", "OLD" }, controller.ClosedRequests.Select(record => record.Number).Order());
+        }
+        finally { release.TrySetResult(); await loading; }
+        Assert.Equal(new[] { "NEW", "OLD" }, controller.ClosedRequests.Select(record => record.Number).Order());
+        var restored = Create(http, store);
+        await restored.SetSessionAsync(App("a"), So("so1"), false);
+        Assert.Equal(new[] { "NEW", "OLD" }, restored.ClosedRequests.Select(record => record.Number).Order());
+    }
+
+    [Fact]
+    public async Task FailedArchiveReadPreventsImportFromOverwritingUnreadCacheAndCanRecover()
+    {
+        using var http = Client(request => Task.FromResult(ReadResponse(request)));
+        var store = new MemoryStore();
+        var seed = Create(http, store);
+        await seed.SetSessionAsync(App("a"), So("so1"), false);
+        Assert.True(await seed.ImportClosedAsync(Preview("OLD")));
+        var cached = Assert.Single(store.Documents).Value.ToJsonString();
+        store.FailReads = true;
+        var controller = Create(http, store);
+        await controller.SetSessionAsync(App("a"), So("so1"), false);
+        Assert.False(await controller.ImportClosedAsync(Preview("NEW")));
+        Assert.Empty(controller.ClosedRequests);
+        Assert.NotNull(controller.ClosedErrorMessage);
+        Assert.Equal(cached, Assert.Single(store.Documents).Value.ToJsonString());
+        store.FailReads = false;
+        Assert.True(await controller.ImportClosedAsync(Preview("NEW")));
+        Assert.Equal(new[] { "NEW", "OLD" }, controller.ClosedRequests.Select(record => record.Number).Order());
+    }
+
     private static WorkspaceController Create(HttpClient http, MemoryStore store) => new(new GsmApi(new Uri("https://luma.example.invalid"), http),
         new SimpleOneClosedRequestsApi(new Uri("https://so.example.invalid/v1"), http, new("11", "22", "33")), store, "synthetic-origins");
     private static AppSession App(string id) => new("secret-token-" + id, new(id, id + "@example.invalid", "engineer"));
@@ -692,10 +748,12 @@ public sealed class WorkspaceTests
         public bool FailWrites { get; set; }
         public bool FailReads { get; set; }
         public Func<Task>? BeforeSave { get; set; }
-        public Task<JsonObject?> LoadAsync(string key, CancellationToken cancellationToken)
+        public Func<string, Task>? BeforeLoad { get; set; }
+        public async Task<JsonObject?> LoadAsync(string key, CancellationToken cancellationToken)
         {
             if (FailReads) throw new IOException("synthetic read failure");
-            return Task.FromResult(Documents.TryGetValue(key, out var value) ? (JsonObject)value.DeepClone() : null);
+            if (BeforeLoad != null) await BeforeLoad(key); // Deliberately ignores cancellation to exercise the publication guard.
+            return Documents.TryGetValue(key, out var value) ? (JsonObject)value.DeepClone() : null;
         }
         public async Task SaveAsync(string key, JsonObject document, CancellationToken cancellationToken)
         {

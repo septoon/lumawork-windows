@@ -14,9 +14,9 @@ internal static class WorkspaceUi
         if(title.Length>0)panel.Children.Add(SectionTitle(title));
         if(subtitle.Length>0)panel.Children.Add(Text(subtitle,true));
         foreach(var item in content)panel.Children.Add(item);
-        return new Border{Child=panel,Padding=new Thickness(20),CornerRadius=new CornerRadius(8),BorderThickness=new Thickness(1),
-            Background=(Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
-            BorderBrush=(Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"]};
+        // Resolve theme brushes after attachment to the XAML tree, including theme changes.
+        var card=(Border)Microsoft.UI.Xaml.Markup.XamlReader.Load("<Border xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Background='{ThemeResource CardBackgroundFillColorDefaultBrush}' BorderBrush='{ThemeResource CardStrokeColorDefaultBrush}' BorderThickness='1' CornerRadius='8' Padding='20'/>");
+        card.Child=panel;return card;
     }
     internal static Grid ValueRow(string label,string value)
     {

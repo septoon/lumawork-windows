@@ -31,6 +31,7 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
     private readonly SemaphoreSlim closedPersistence = new(1, 1);
     private JsonObject? pendingReport;
     private bool gsmCacheLoaded;
+    private string? loadedClosedKey;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true };
     public string Month { get; private set; } = DateTime.Now.ToString("yyyy-MM", CultureInfo.InvariantCulture);
     public GsmProfileResult ProfileResult { get; private set; } = new(null, []);
@@ -81,7 +82,7 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
         this.app = app; this.so = so; this.online = online;
         ClosedErrorMessage = null; ClosedInfoMessage = null; RequiresSimpleOneReauthentication = false;
         if (appChanged) ClearGsm();
-        if (appChanged || soChanged) { ClosedRequests = []; LastClosedUpdated = null; }
+        if (appChanged || soChanged) { ClosedRequests = []; LastClosedUpdated = null; loadedClosedKey = null; }
         Changed?.Invoke();
         if (app == null) return;
         // Each domain owns its operation. A large SimpleOne archive must not lock GSM work.
@@ -125,6 +126,8 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
         CancelClosed(); // An explicit import replaces an unfinished server read, never a mutation.
         return RunAsync(async (context, ct) =>
         {
+            if (loadedClosedKey != context.ClosedKey) await LoadClosedAsync(context, ct);
+            Check(context, ct);
             var records = ClosedRequestsMerge.Upsert(ClosedRequests, preview.Records);
             var updated = DateTimeOffset.UtcNow;
             await SaveAsync(context.ClosedKey, new JsonObject { ["version"] = 1, ["records"] = Node(records), ["updatedAt"] = updated.ToString("O") }, context, ct, closedDomain: true);
@@ -247,6 +250,9 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
     private async Task FetchClosedAsync(Context context, CancellationToken ct)
     {
         Check(context, ct);
+        // Network refreshes merge with the existing archive too; never replace an unread cache.
+        if (loadedClosedKey != context.ClosedKey) await LoadClosedAsync(context, ct);
+        Check(context, ct);
         RequiresSimpleOneReauthentication = false;
         if (context.SimpleOne == null) throw new InvalidOperationException("Подключите SimpleOne.");
         IReadOnlyList<ClosedRequest> fetched;
@@ -286,9 +292,10 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
     private async Task LoadClosedAsync(Context context, CancellationToken ct)
     {
         var document = await store.LoadAsync(context.ClosedKey, ct); Check(context, ct);
-        if (document == null) return;
+        if (document == null) { loadedClosedKey = context.ClosedKey; return; }
         var records = Read<ClosedRequest[]>(document, "records");
         ClosedRequests = ClosedRequestsMerge.Upsert([], records); LastClosedUpdated = Timestamp(document, "updatedAt");
+        loadedClosedKey = context.ClosedKey;
     }
     private Task SaveGsmAsync(Context context, GsmProfileResult profile, IReadOnlyList<GsmProject> projects, GsmMonthData month,
         IReadOnlyList<JsonObject> jobs, DateTimeOffset? updated, JsonObject? pending, CancellationToken ct)

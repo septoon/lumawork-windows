@@ -29,7 +29,8 @@ internal sealed class ClosedRequestsView : UserControl
         panel.Children.Add(notice);
         var archive=new StackPanel{Spacing=12};archive.Children.Add(summary);archive.Children.Add(search);archive.Children.Add(empty);
         search.TextChanged+=(_,_)=>RenderList();
-        archive.Children.Add(new TextBlock{Text="Номер заявки                         Адрес",FontWeight=Microsoft.UI.Text.FontWeights.SemiBold});
+        var header=new Grid{ColumnSpacing=16};header.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(150)});header.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(1,GridUnitType.Star)});
+        var numberHeader=WorkspaceUi.Text("Номер заявки",true);var addressHeader=WorkspaceUi.Text("Адрес",true);Grid.SetColumn(addressHeader,1);header.Children.Add(numberHeader);header.Children.Add(addressHeader);archive.Children.Add(header);
         list.ItemTemplate=(DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load("<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'><Grid ColumnSpacing='16' Padding='0,6'><Grid.ColumnDefinitions><ColumnDefinition Width='150'/><ColumnDefinition Width='*'/></Grid.ColumnDefinitions><TextBlock Text='{Binding Number}'/><TextBlock Grid.Column='1' Text='{Binding Address}' TextWrapping='Wrap'/></Grid></DataTemplate>");
         archive.Children.Add(list);var actions=new StackPanel{Orientation=Orientation.Horizontal,Spacing=8};
         copy=WorkspaceUi.Button("Копировать адрес",Copy_Click);actions.Children.Add(copy);add=WorkspaceUi.Button("Добавить в маршрут",AddRoute_Click);actions.Children.Add(add);archive.Children.Add(actions);

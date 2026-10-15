@@ -23,5 +23,9 @@ try {
     }
     throw 'Startup smoke failed: no enabled request-code button on the login screen.'
 } finally {
+    if ($env:GITHUB_ACTIONS -eq 'true') {
+        $diagnostic = Join-Path $env:LOCALAPPDATA 'LumaWork/EngineerLite/ci-startup.log'
+        if (Test-Path $diagnostic) { Get-Content $diagnostic | Write-Output }
+    }
     Get-Process -Name 'Инженер Lite' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $innerPath -or $_.Path -eq $launcher } | Stop-Process -Force -ErrorAction SilentlyContinue
 }

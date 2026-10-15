@@ -98,6 +98,9 @@ internal sealed class ProfileWorkspaceView : UserControl
 
     private async Task EditAsync(GsmImportPreview? preview = null)
     {
+        // A verified profile and its catalogues can be edited without waiting for monthly data.
+        if(workspace.IsGsmBusy&&!workspace.IsGsmMutation&&workspace.ProfileLoaded&&workspace.Projects.Count>0&&workspace.ProfileResult.AvailableFuelTypes.Count>0)
+            workspace.CancelGsm();
         var capturedScope = scope();
         var capturedProfile = workspace.ProfileResult;
         var capturedProjects = workspace.Projects;
