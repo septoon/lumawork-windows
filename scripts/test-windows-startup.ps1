@@ -21,6 +21,11 @@ try {
             exit 0
         }
     }
+    if ($root) {
+        foreach ($element in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)) {
+            if ($element.Current.Name) { Write-Output ("UI: " + $element.Current.Name) }
+        }
+    }
     throw 'Startup smoke failed: no enabled request-code button on the login screen.'
 } finally {
     if ($env:GITHUB_ACTIONS -eq 'true') {

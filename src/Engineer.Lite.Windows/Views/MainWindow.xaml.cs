@@ -52,6 +52,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException)
         {
+            App.WriteCiStartupError(error);
             LoginError.Message = "Не удалось загрузить настройки подключения. Проверьте app/appsettings.json и перезапустите приложение.";
             LoginError.IsOpen = true; LoginFields.IsEnabled = false;
         }
