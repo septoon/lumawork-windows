@@ -2,8 +2,8 @@
 #include <windows.h>
 1 ICON "../Engineer.Lite.Windows/Assets/AppIcon.ico"
 1 VERSIONINFO
- FILEVERSION 0,1,0,3
- PRODUCTVERSION 0,1,0,3
+ FILEVERSION 0,1,0,4
+ PRODUCTVERSION 0,1,0,4
  FILETYPE VFT_APP
 BEGIN
  BLOCK "StringFileInfo"
@@ -12,8 +12,8 @@ BEGIN
   BEGIN
    VALUE "FileDescription", "Инженер Lite\0"
    VALUE "ProductName", "Инженер Lite\0"
-   VALUE "FileVersion", "0.1.0.3\0"
-   VALUE "ProductVersion", "0.1.0.3\0"
+   VALUE "FileVersion", "0.1.0.4\0"
+   VALUE "ProductVersion", "0.1.0.4\0"
   END
  END
  BLOCK "VarFileInfo"

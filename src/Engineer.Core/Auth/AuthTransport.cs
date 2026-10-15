@@ -37,7 +37,7 @@ internal sealed class AuthTransport
         else
         {
             request.Headers.Add("X-LumaWork-Version", "0.1.0");
-            request.Headers.Add("X-LumaWork-Build", "3");
+            request.Headers.Add("X-LumaWork-Build", "4");
             if (credential != null) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", credential);
         }
         if (body != null) request.Content = JsonContent.Create(body);
@@ -67,14 +67,16 @@ internal sealed class AuthTransport
         }
         else if (!response.IsSuccessStatusCode)
         {
-            throw Text(json, "error") switch
+            var errorCode = Text(json, "error");
+            var (message, invalidatesSession) = errorCode switch
             {
-                "INVALID_CODE" => new AuthException("Код не подошёл или истёк."),
-                "CODE_RECENTLY_SENT" => new AuthException("Код уже отправлен. Повторите через минуту."),
-                "USER_BLOCKED" => new AuthException("Доступ отозван. Обратитесь в поддержку.", true),
-                _ when response.StatusCode is HttpStatusCode.Unauthorized => new AuthException("Сессия LumaWork истекла. Войдите снова.", true),
-                _ => new AuthException($"LumaWork вернул HTTP {(int)response.StatusCode}. Повторите позже.")
+                "INVALID_CODE" => ("Код не подошёл или истёк.", false),
+                "CODE_RECENTLY_SENT" => ("Код уже отправлен. Повторите через минуту.", false),
+                "USER_BLOCKED" => ("Доступ отозван. Обратитесь в поддержку.", true),
+                _ when response.StatusCode is HttpStatusCode.Unauthorized => ("Сессия LumaWork истекла. Войдите снова.", true),
+                _ => ($"LumaWork вернул HTTP {(int)response.StatusCode}. Повторите позже.", false)
             };
+            throw new AuthException(message, invalidatesSession, (int)response.StatusCode, errorCode);
         }
         return json;
     }

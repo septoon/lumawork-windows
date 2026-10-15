@@ -1,6 +1,8 @@
 using System.Reflection;
 using Engineer.Core.App;
 using Engineer.Core.Auth;
+using Engineer.Core.Workspace;
+using Engineer.Lite.Windows.Features;
 using Engineer.Lite.Windows.Platform;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -13,7 +15,11 @@ namespace Engineer.Lite.Windows.Views;
 public sealed partial class MainWindow : Window
 {
     private readonly SessionController? session;
-    private bool restored;
+    private readonly WorkspaceController? workspace;
+    private readonly ReportWorkspaceView? reportsView;
+    private readonly ClosedRequestsView? requestsView;
+    private bool restored,closed,handlingAuthError;
+    private readonly DispatcherTimer refreshTimer=new(){Interval=TimeSpan.FromMinutes(5)};
     public MainWindow()
     {
         InitializeComponent();
@@ -28,9 +34,16 @@ public sealed partial class MainWindow : Window
         try
         {
             session = SessionFactory.Create();
-            session.Changed += RenderSession;
+            workspace=SessionFactory.CreateWorkspace();
+            reportsView=new(this,workspace,CurrentScope,IsOnline,ReconnectAsync,()=>session.App?.User.Email??"");
+            requestsView=new(this,workspace,CurrentScope,IsOnline,ReconnectAsync);
+            workspace.Changed+=Workspace_Changed;
+            session.Changed += Session_Changed;
+            WorkspaceHost.Content=reportsView;SimpleOneCard.Visibility=Visibility.Collapsed;
+            refreshTimer.Tick+=async(_,_)=>{if(!closed&&!workspace.IsBusy&&session.SimpleOneConnection==ConnectionState.Online)await workspace.RefreshClosedAsync();};
+            refreshTimer.Start();
             LoginScreen.Loaded += async (_, _) => { if (restored) return; restored = true; await session.RestoreAsync(); RenderSession(); };
-            Closed += (_, _) => { session.CancelPending(); CodeBox.Password = SoPassword.Password = ""; };
+            Closed += (_, _) => { closed=true;refreshTimer.Stop();workspace.Cancel();session.CancelPending(); CodeBox.Password = SoPassword.Password = ""; };
             RenderSession();
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException)
@@ -74,10 +87,37 @@ public sealed partial class MainWindow : Window
         var section = LiteNavigation.Restore((args.SelectedItem as NavigationViewItem)?.Tag as string);
         ContentTitle.Text = section == LiteSection.Home ? "Главная" : "Заявки";
         ContentSummary.Text = section == LiteSection.Home ? "Подготовка месячного ГСМ-отчёта" : "Закрытые заявки: номера и адреса";
-        ContentState.Text = section == LiteSection.Home
-            ? "Импорт реквизитов из XLSX и подготовка отчёта — следующий этап Lite."
-            : "Подключите SimpleOne ниже. Импорт и обновление архива заявок — следующий этап Lite.";
+        WorkspaceHost.Content=section==LiteSection.Home?reportsView:requestsView;
+        SimpleOneCard.Visibility=section==LiteSection.ClosedRequests?Visibility.Visible:Visibility.Collapsed;
     }
+    private string CurrentScope()=>closed||session?.App==null?"":session.App.Token+"|"+session.SimpleOne?.AuthKey;
+    private bool IsOnline()=>session?.AppConnection==ConnectionState.Online;
+    private void Session_Changed()
+    {
+        if(closed)return;RenderSession();
+        if(workspace!=null&&session!=null)_=workspace.SetSessionAsync(session.App,session.SimpleOne,IsOnline());
+    }
+    private async Task ReconnectAsync()
+    {
+        if(session!=null&&(session.AppConnection!=ConnectionState.Online||session.SimpleOneConnection==ConnectionState.Offline))await session.RestoreAsync();
+    }
+    private async void Workspace_Changed()
+    {
+        if(closed||workspace==null||session==null||workspace.IsBusy||session.IsBusy||handlingAuthError)return;
+        if(!workspace.RequiresReauthentication&&!workspace.RequiresSimpleOneReauthentication)return;
+        handlingAuthError=true;
+        try
+        {
+            if(workspace.RequiresReauthentication)await session.RestoreAsync();
+            else if(workspace.RequiresSimpleOneReauthentication)
+            {
+                session.DisconnectSimpleOne();SoError.Message="Сессия SimpleOne истекла. Войдите снова.";SoError.IsOpen=true;
+            }
+        }
+        finally{handlingAuthError=false;}
+    }
+    private void Navigation_DisplayModeChanged(NavigationView sender,NavigationViewDisplayModeChangedEventArgs args)
+    {if(AccountFooter!=null)AccountFooter.Visibility=args.DisplayMode==NavigationViewDisplayMode.Expanded?Visibility.Visible:Visibility.Collapsed;}
     private async Task SubmitLoginAsync()
     {
         if (session == null || session.IsBusy) return;

@@ -8,10 +8,10 @@
                     <TextBlock Text="Вход в LumaWork" Style="{ThemeResource SubtitleTextBlockStyle}"/>
                     <TextBlock Text="Введите рабочую почту. Мы отправим код для входа." TextWrapping="Wrap"/>
                     <ContentControl x:Name="LoginFields" HorizontalContentAlignment="Stretch"><StackPanel Spacing="12">
-                        <TextBox x:Name="EmailBox" Header="Рабочая почта" PlaceholderText="name@example.ru" InputScope="EmailSmtpAddress" KeyDown="Login_KeyDown"/>
-                        <PasswordBox x:Name="CodeBox" Header="Код из письма" MaxLength="6" Visibility="Collapsed" KeyDown="Login_KeyDown"/>
+                        <TextBox x:Name="EmailBox" AutomationProperties.AutomationId="EmailBox" Header="Рабочая почта" PlaceholderText="name@example.ru" InputScope="EmailSmtpAddress" KeyDown="Login_KeyDown"/>
+                        <PasswordBox x:Name="CodeBox" AutomationProperties.AutomationId="CodeBox" Header="Код из письма" MaxLength="6" Visibility="Collapsed" KeyDown="Login_KeyDown"/>
                         <TextBlock x:Name="CodeHint" Visibility="Collapsed" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                        <Button x:Name="LoginButton" Content="Получить код" Click="Login_Click" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch"/>
+                        <Button x:Name="LoginButton" AutomationProperties.AutomationId="LoginButton" Content="Получить код" Click="Login_Click" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch"/>
                         <StackPanel x:Name="CodeActions" Orientation="Horizontal" Spacing="12" Visibility="Collapsed">
                             <Button Content="Другая почта" Click="ChangeEmail_Click"/>
                             <Button Content="Отправить снова" Click="Resend_Click"/>
@@ -24,13 +24,13 @@
                 </StackPanel>
             </ScrollViewer>
         </Grid>
-        <NavigationView x:Name="Navigation" Visibility="Collapsed" IsBackButtonVisible="Collapsed" IsSettingsVisible="False" PaneDisplayMode="Auto" SelectionChanged="Navigation_SelectionChanged">
+        <NavigationView x:Name="Navigation" Visibility="Collapsed" IsBackButtonVisible="Collapsed" IsSettingsVisible="False" PaneDisplayMode="Auto" OpenPaneLength="260" DisplayModeChanged="Navigation_DisplayModeChanged" SelectionChanged="Navigation_SelectionChanged">
             <NavigationView.PaneHeader>
                 <TextBlock Margin="16,12" Text="Инженер Lite" Style="{ThemeResource SubtitleTextBlockStyle}"/>
             </NavigationView.PaneHeader>
             <NavigationView.PaneFooter>
-                <StackPanel Margin="16" Spacing="8">
-                    <TextBlock x:Name="AccountEmail" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <StackPanel x:Name="AccountFooter" Margin="16" Spacing="8">
+                    <TextBlock x:Name="AccountEmail" TextTrimming="CharacterEllipsis" Style="{ThemeResource CaptionTextBlockStyle}"/>
                     <Button x:Name="LogoutButton" Content="Выйти из LumaWork" Click="Logout_Click"/>
                 </StackPanel>
             </NavigationView.PaneFooter>
@@ -40,15 +40,10 @@
                     <InfoBar x:Name="SessionWarning" Severity="Warning" IsClosable="False" IsOpen="False">
                         <InfoBar.ActionButton><Button Content="Повторить" Click="Retry_Click"/></InfoBar.ActionButton>
                     </InfoBar>
-                    <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="20">
-                        <StackPanel Spacing="12">
-                            <TextBlock Text="LumaWork" Style="{ThemeResource SubtitleTextBlockStyle}"/>
-                            <TextBlock x:Name="LumaStatus" TextWrapping="Wrap"/>
-                            <TextBlock x:Name="ContentSummary" TextWrapping="Wrap"/>
-                            <TextBlock x:Name="ContentState" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                        </StackPanel>
-                    </Border>
-                    <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="20">
+                    <TextBlock x:Name="LumaStatus" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <TextBlock x:Name="ContentSummary" TextWrapping="Wrap" Visibility="Collapsed"/>
+                    <ContentControl x:Name="WorkspaceHost" HorizontalContentAlignment="Stretch"/>
+                    <Border x:Name="SimpleOneCard" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="20">
                         <StackPanel Spacing="12">
                             <TextBlock Text="SimpleOne" Style="{ThemeResource SubtitleTextBlockStyle}"/>
                             <TextBlock Text="Отдельный вход для доступа к закрытым заявкам." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
@@ -59,8 +54,8 @@
                             <StackPanel x:Name="SoDisconnected" Spacing="12">
                                 <Button x:Name="SoOpenButton" Content="Войти в SimpleOne" Click="SoOpen_Click"/>
                                 <ContentControl x:Name="SoFields" Visibility="Collapsed" MaxWidth="400" HorizontalAlignment="Left" HorizontalContentAlignment="Stretch"><StackPanel Spacing="12">
-                                    <TextBox x:Name="SoUsername" Header="Логин SimpleOne" PlaceholderText="Логин" KeyDown="So_KeyDown" MinWidth="240"/>
-                                    <PasswordBox x:Name="SoPassword" Header="Пароль" KeyDown="So_KeyDown"/>
+                                    <TextBox x:Name="SoUsername" AutomationProperties.AutomationId="SoUsername" Header="Логин SimpleOne" PlaceholderText="Логин" KeyDown="So_KeyDown" MinWidth="240"/>
+                                    <PasswordBox x:Name="SoPassword" AutomationProperties.AutomationId="SoPassword" Header="Пароль" KeyDown="So_KeyDown"/>
                                     <TextBlock Text="Пароль используется только для входа и не сохраняется." TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"/>
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <Button Content="Подключиться" Style="{StaticResource AccentButtonStyle}" Click="SoLogin_Click"/>

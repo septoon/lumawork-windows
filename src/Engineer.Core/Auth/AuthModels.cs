@@ -17,9 +17,11 @@ public sealed record SessionCredentials(string AppOrigin, string SimpleOneOrigin
 {
     public override string ToString() => "Protected session credentials";
 }
-public sealed class AuthException(string message, bool invalidatesSession = false) : Exception(message)
+public sealed class AuthException(string message, bool invalidatesSession = false, int? statusCode = null, string? errorCode = null) : Exception(message)
 {
     public bool InvalidatesSession { get; } = invalidatesSession;
+    public int? StatusCode { get; } = statusCode;
+    public string? ErrorCode { get; } = errorCode;
 }
 public interface ILumaWorkAuthApi
 {
