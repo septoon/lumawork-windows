@@ -95,6 +95,8 @@ public sealed partial class MainWindow : Window
         WorkspaceHost.Content=section==LiteSection.Profile?profileView:section==LiteSection.Home?reportsView:requestsView;
         SimpleOneCard.Visibility=Visibility.Visible;
     }
+    private void PageViewport_SizeChanged(object sender,SizeChangedEventArgs e)
+    {if(PageContent!=null)PageContent.Width=Math.Max(0,Math.Min(1040,e.NewSize.Width-64));}
     private void Navigate(LiteSection section)=>Navigation.SelectedItem=Navigation.MenuItems.Cast<NavigationViewItem>().First(i=>(string)i.Tag==LiteNavigation.Sections.First(s=>s.Section==section).Key);
     private string CurrentScope()=>closed||session?.App==null?"":session.App.Token+"|"+session.SimpleOne?.AuthKey;
     private bool IsOnline()=>session?.AppConnection==ConnectionState.Online;

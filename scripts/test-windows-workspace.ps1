@@ -62,19 +62,39 @@ function Save-UiScreenshot([string]$name) {
     } finally { $graphics.Dispose(); $bitmap.Dispose() }
 }
 function Choose-Xlsx([string]$path) {
-    $field = $null
-    $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty, '1148')
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class SmokeFileDialog {
+    [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr parent,int id);
+    [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr parent,IntPtr after,string className,string title);
+    [DllImport("user32.dll",EntryPoint="SendMessageW",CharSet=CharSet.Unicode)] public static extern IntPtr SetText(IntPtr window,uint message,IntPtr parameter,string value);
+    [DllImport("user32.dll",EntryPoint="PostMessageW")] public static extern bool PostMessage(IntPtr window,uint message,IntPtr wParam,IntPtr lParam);
+}
+'@
+    $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Window)
+    $dialog = $null
     for ($i = 0; $i -lt 60; $i++) {
-        $field = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
-        if ($field) { break }
+        foreach ($candidate in $script:root.FindAll([System.Windows.Automation.TreeScope]::Descendants,$condition)) {
+            if ($candidate.Current.Name -eq 'Open') { $dialog = $candidate; break }
+        }
+        if ($dialog) { break }
         Start-Sleep -Milliseconds 250
     }
-    if (-not $field) { throw 'Native file picker did not expose its file-name field.' }
-    $field.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($path)
-    $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, 'Open')
-    $open = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
-    if (-not $open) { throw 'Native file picker Open button not found.' }
-    $open.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+    if (-not $dialog) { throw 'Native file picker window not found.' }
+    $handle = [IntPtr]$dialog.Current.NativeWindowHandle
+    $combo = [SmokeFileDialog]::GetDlgItem($handle,1148)
+    if ($combo -eq [IntPtr]::Zero) { throw 'Native file-name control not found.' }
+    $edit = [SmokeFileDialog]::FindWindowEx($combo,[IntPtr]::Zero,'Edit',$null)
+    if ($edit -eq [IntPtr]::Zero) {
+        $inner = [SmokeFileDialog]::FindWindowEx($combo,[IntPtr]::Zero,'ComboBox',$null)
+        if ($inner -eq [IntPtr]::Zero) { throw 'Native file-name combo edit not found.' }
+        $edit = [SmokeFileDialog]::FindWindowEx($inner,[IntPtr]::Zero,'Edit',$null)
+    }
+    if ($edit -eq [IntPtr]::Zero) { throw 'Native file picker file-name edit control not found.' }
+    $null = [SmokeFileDialog]::SetText($edit,0x000C,[IntPtr]::Zero,$path)
+    # IDOK is the actual native dialog Open action. No application import API is bypassed.
+    if (-not [SmokeFileDialog]::PostMessage($handle,0x0111,[IntPtr]1,[IntPtr]::Zero)) { throw 'Native file picker Open action failed.' }
 }
 
 try {
@@ -131,6 +151,7 @@ try {
     Save-UiScreenshot '05-manual-import'
     Write-Output 'PASS: native file picker imported a real synthetic XLSX and displayed its address without SimpleOne authorization.'
 
+    (Wait-Ui 'SimpleOneConnection' $true).GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
     Invoke-Ui 'Войти в SimpleOne'
     Set-Ui 'SoUsername' 'smoke'
     Set-Ui 'SoPassword' 'synthetic-password'

@@ -19,13 +19,16 @@ internal sealed class ClosedRequestsView : UserControl
     internal ContentControl ConnectionHost {get;}=new(){HorizontalContentAlignment=HorizontalAlignment.Stretch};
     internal ClosedRequestsView(Window owner,WorkspaceController workspace,Func<string> scope,Func<bool> online,Func<Task> reconnect)
     {
+        HorizontalContentAlignment=HorizontalAlignment.Stretch;
         this.owner=owner;this.workspace=workspace;this.scope=scope;this.online=online;this.reconnect=reconnect;
         var panel=new StackPanel{Spacing=16};
         import=WorkspaceUi.Button("Выбрать XLSX с заявками",Import_Click,true);
         panel.Children.Add(WorkspaceUi.Card("Загрузка из Excel","1. В SimpleOne откройте свои закрытые заявки и экспортируйте список в Excel.\n2. Выберите полученный .xlsx здесь. Проверьте предпросмотр и подтвердите импорт.\nВход в SimpleOne в приложении для этого не требуется.",import));
         refresh=WorkspaceUi.Button("Обновить из SimpleOne",Refresh_Click);cancel=WorkspaceUi.Button("Остановить загрузку",(_,_)=>workspace.CancelClosed());
-        var sync=new StackPanel{Orientation=Orientation.Horizontal,Spacing=8};sync.Children.Add(refresh);sync.Children.Add(cancel);
-        panel.Children.Add(WorkspaceUi.Card("Автоматическая загрузка","Подключите SimpleOne ниже. Заявки обновляются автоматически каждые 5 минут; можно обновить вручную.",ConnectionHost,sync,progress,loading));
+        var sync=new StackPanel{Spacing=12};sync.Children.Add(ConnectionHost);sync.Children.Add(WorkspaceUi.Text("После подключения обновляем заявки каждые 5 минут.",true));sync.Children.Add(refresh);
+        var connection=new Expander{Header="Автоматическое обновление из SimpleOne",Content=sync,HorizontalAlignment=HorizontalAlignment.Stretch,HorizontalContentAlignment=HorizontalAlignment.Stretch};
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(connection,"SimpleOneConnection");
+        panel.Children.Add(connection);panel.Children.Add(progress);panel.Children.Add(loading);panel.Children.Add(cancel);
         panel.Children.Add(notice);
         var archive=new StackPanel{Spacing=12};archive.Children.Add(summary);archive.Children.Add(search);archive.Children.Add(empty);
         search.TextChanged+=(_,_)=>RenderList();

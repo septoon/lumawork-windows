@@ -109,6 +109,7 @@ internal static class GsmProfileDialog
         panel.Children.Add(error);
         var dialog = WorkspaceUi.Dialog(root, preview == null ? "Изменить профиль" : "Проверить реквизиты из отчёта",
             new ScrollViewer { Content = panel, MaxHeight = 560, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled }, "Сохранить в LumaWork");
+        dialog.DefaultButton=ContentDialogButton.Primary;
         void UpdateAvailability()
         {
             var reason = saveBlockedReason?.Invoke();

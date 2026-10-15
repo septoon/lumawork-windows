@@ -25,6 +25,7 @@ internal sealed class ProfileWorkspaceView : UserControl
 
     internal ProfileWorkspaceView(Window owner, WorkspaceController workspace, Func<string> scope, Func<bool> online, Func<Task> reconnect)
     {
+        HorizontalContentAlignment=HorizontalAlignment.Stretch;
         this.owner = owner; this.workspace = workspace; this.scope = scope; this.online = online; this.reconnect = reconnect;
         var panel = new StackPanel { Spacing = 16, MaxWidth = 1040, HorizontalAlignment = HorizontalAlignment.Stretch };
         panel.Children.Add(WorkspaceUi.Text("Реквизиты сотрудника, автомобиля и проектов для ГСМ-отчётов.", true));

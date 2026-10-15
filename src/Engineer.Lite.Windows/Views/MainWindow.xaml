@@ -34,7 +34,7 @@
                     <Button x:Name="LogoutButton" Content="Выйти из LumaWork" Click="Logout_Click"/>
                 </StackPanel>
             </NavigationView.PaneFooter>
-            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+            <ScrollViewer x:Name="PageViewport" HorizontalScrollBarVisibility="Disabled" SizeChanged="PageViewport_SizeChanged">
                 <StackPanel x:Name="PageContent" Margin="32,24" Spacing="16" MaxWidth="1040" HorizontalAlignment="Left">
                     <TextBlock x:Name="ContentTitle" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap"/>
                     <InfoBar x:Name="SessionWarning" Severity="Warning" IsClosable="False" IsOpen="False">

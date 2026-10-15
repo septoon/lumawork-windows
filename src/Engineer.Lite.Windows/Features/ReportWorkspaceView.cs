@@ -24,6 +24,7 @@ internal sealed class ReportWorkspaceView : UserControl
     private readonly Button refresh,generate,editRoute,editFuel,addRoute,addFuel,cancel,load;
     internal ReportWorkspaceView(Window owner,WorkspaceController workspace,Func<string> scope,Func<bool> online,Func<Task> reconnect,Func<string> email,Action openProfile)
     {
+        HorizontalContentAlignment=HorizontalAlignment.Stretch;
         this.workspace=workspace;this.scope=scope;this.online=online;this.reconnect=reconnect;this.email=email;
         var panel=new StackPanel{Spacing=16};
         var months=new[]{"Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"};
