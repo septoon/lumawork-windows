@@ -39,7 +39,7 @@ function Set-Ui([string]$id, [string]$value) {
 function Wait-Text([string]$fragment) {
     for ($i = 0; $i -lt 60; $i++) {
         $all = $script:root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
-        foreach ($element in $all) { if ($element.Current.Name.Contains($fragment)) { return } }
+        foreach ($element in $all) { $name = [string]$element.Current.Name; if ($name.Contains($fragment)) { return } }
         Start-Sleep -Milliseconds 250
     }
     throw "UI text missing: $fragment"
