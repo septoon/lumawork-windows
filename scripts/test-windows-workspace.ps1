@@ -89,6 +89,13 @@ try {
     Invoke-Ui 'Обновить'
     Wait-Text 'Smoke Closed Address'
     Write-Output 'PASS: separate SimpleOne login loaded closed addresses, excluded an open request, and manual-import/refresh controls are available.'
+} catch {
+    if ($script:root) {
+        $all = $script:root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+        foreach ($element in $all) { if ($element.Current.Name) { Write-Output ("UI: " + $element.Current.ControlType.ProgrammaticName + " | " + $element.Current.Name) } }
+    }
+    try { Write-Output ((Invoke-RestMethod "$env:LUMAWORK_API_URL/smoke-status") | ConvertTo-Json -Compress -Depth 5) } catch {}
+    throw
 } finally {
     Get-Process -Name 'Инженер Lite' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $innerPath -or $_.Path -eq (Join-Path $portable 'Инженер Lite.exe') } | Stop-Process -Force -ErrorAction SilentlyContinue
     if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue }

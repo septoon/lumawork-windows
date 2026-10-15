@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 
 class Handler(BaseHTTPRequestHandler):
+    requests_seen = []
     def log_message(self, *_args):
         pass
 
@@ -18,6 +19,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def respond(self):
         path = urlparse(self.path).path
+        self.requests_seen.append(self.command + " " + path)
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
         month = date.today().strftime("%Y-%m")
         profile = {key: "Smoke Test" for key in (
@@ -29,6 +31,7 @@ class Handler(BaseHTTPRequestHandler):
         user = {"id": "workspace-smoke", "email": "smoke@example.invalid", "role": "engineer"}
         responses = {
             "/health": {"ok": True},
+            "/smoke-status": {"requests": self.requests_seen[-100:]},
             "/auth/request-code": {"success": True},
             "/auth/verify-code": {"token": "synthetic-smoke-session", "user": user},
             "/me": {"user": user},
