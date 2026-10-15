@@ -57,7 +57,7 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: EngineerLite-Windows-x64
-          path: artifacts/release/EngineerLite-Windows-x64.zip
+          path: artifacts/portable/
           if-no-files-found: error
           retention-days: 7
       - name: Upload build diagnostics
