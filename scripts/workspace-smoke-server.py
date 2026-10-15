@@ -17,10 +17,24 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         self.respond()
 
+    def read_body(self):
+        if self.headers.get("Transfer-Encoding", "").lower() != "chunked":
+            return self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        chunks = []
+        while True:
+            size = int(self.rfile.readline().split(b";", 1)[0], 16)
+            if size == 0:
+                while self.rfile.readline().strip():
+                    pass
+                return b"".join(chunks)
+            chunks.append(self.rfile.read(size))
+            if self.rfile.read(2) != b"\r\n":
+                raise ValueError("Invalid synthetic request chunk")
+
     def respond(self):
         path = urlparse(self.path).path
         self.requests_seen.append(self.command + " " + path)
-        body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+        body = json.loads(self.read_body() or b"{}")
         month = date.today().strftime("%Y-%m")
         profile = {key: "Smoke Test" for key in (
             "employeeShortName", "employeeReportSignName", "authorizedFullName", "authorizedShortName",
