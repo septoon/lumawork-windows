@@ -398,6 +398,261 @@ public sealed class WorkspaceTests
         Assert.Equal(1, posts);
     }
 
+    [Fact]
+    public async Task DelayedClosedRefreshAllowsGsmSaveAndManualImportAndDiscardsLateResponse()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var puts = 0;
+        using var http = Client(async request =>
+        {
+            if (request.RequestUri!.Host == "so.example.invalid")
+            {
+                entered.TrySetResult(); await release.Task;
+                return Response("""{"data":{"items":[{"sys_id":"remote","number":"REMOTE","state":"closed"}],"total":1}}""");
+            }
+            if (request.Method == HttpMethod.Put) { puts++; return Response("{}"); }
+            return ReadResponse(request);
+        });
+        var controller = Create(http, new MemoryStore());
+        var loading = controller.SetSessionAsync(App("a"), So("so1"), true);
+        await entered.Task;
+        try
+        {
+            Assert.NotNull(controller.ProfileResult.Profile);
+            Assert.True(controller.IsClosedBusy);
+            Assert.False(controller.IsGsmBusy);
+            Assert.True(controller.ProfileLoaded);
+            Assert.True(controller.MonthLoaded);
+            Assert.NotNull(controller.ClosedLoadingMessage);
+            Assert.True(await controller.SaveRouteAsync(new JsonObject { ["date"] = controller.Month + "-01", ["workType"] = "POS", ["sent"] = false, ["stops"] = new JsonArray() }));
+            Assert.Equal(1, puts);
+            Assert.True(await controller.ImportClosedAsync(Preview("MANUAL")));
+            Assert.Equal("MANUAL", Assert.Single(controller.ClosedRequests).Number);
+        }
+        finally { release.TrySetResult(); await loading; }
+        Assert.Equal("MANUAL", Assert.Single(controller.ClosedRequests).Number);
+        Assert.False(controller.IsBusy);
+    }
+
+    [Fact]
+    public async Task ProfilePublishesBeforeSlowMonthAndRemainsVisibleAfterFuelFailure()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var http = Client(async request =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/api/v2/fuel")
+            {
+                entered.TrySetResult(); await release.Task;
+                return new HttpResponseMessage(HttpStatusCode.InternalServerError);
+            }
+            return ReadResponse(request);
+        });
+        var controller = Create(http, new MemoryStore());
+        var loading = controller.SetSessionAsync(App("a"), null, true);
+        await entered.Task;
+        try
+        {
+            Assert.NotNull(controller.ProfileResult.Profile);
+            Assert.True(controller.ProfileLoaded);
+            Assert.False(controller.MonthLoaded);
+            Assert.True(controller.IsGsmBusy);
+            Assert.Contains("заправки", controller.GsmLoadingMessage);
+        }
+        finally { release.TrySetResult(); await loading; }
+        Assert.NotNull(controller.ProfileResult.Profile);
+        Assert.True(controller.ProfileLoaded);
+        Assert.False(controller.MonthLoaded);
+        Assert.NotNull(controller.GsmErrorMessage);
+        Assert.Null(controller.ClosedErrorMessage);
+        Assert.False(controller.IsBusy);
+        Assert.False(await controller.GenerateReportAsync());
+        Assert.Contains("Обновите данные выбранного месяца", controller.GsmErrorMessage);
+    }
+
+    [Fact]
+    public async Task DomainErrorsAndSuccessMessagesAreIndependent()
+    {
+        var failGsm = false; var failClosed = false;
+        using var http = Client(request => Task.FromResult(request.RequestUri!.Host == "so.example.invalid"
+            ? failClosed ? new HttpResponseMessage(HttpStatusCode.InternalServerError) : Response("""{"data":{"items":[],"total":0}}""")
+            : failGsm ? new HttpResponseMessage(HttpStatusCode.InternalServerError) : ReadResponse(request)));
+        var controller = Create(http, new MemoryStore());
+        await controller.SetSessionAsync(App("a"), So("so1"), true);
+        failGsm = true;
+        Assert.False(await controller.RefreshGsmAsync());
+        var gsmError = controller.GsmErrorMessage;
+        Assert.NotNull(gsmError);
+        Assert.Null(controller.ClosedErrorMessage);
+        Assert.True(await controller.ImportClosedAsync(Preview("MANUAL")));
+        Assert.Equal(gsmError, controller.GsmErrorMessage);
+        Assert.NotNull(controller.ClosedInfoMessage);
+        failClosed = true;
+        Assert.False(await controller.RefreshClosedAsync());
+        var closedError = controller.ClosedErrorMessage;
+        Assert.NotNull(closedError);
+        Assert.Equal(gsmError, controller.GsmErrorMessage);
+        failGsm = false;
+        Assert.True(await controller.RefreshGsmAsync());
+        Assert.Null(controller.GsmErrorMessage);
+        Assert.Equal(closedError, controller.ClosedErrorMessage);
+        failClosed = false;
+        Assert.True(await controller.RefreshClosedAsync());
+        Assert.Null(controller.ClosedErrorMessage);
+    }
+
+    [Fact]
+    public async Task EachReadCanBeCancelledWithoutWaitingForTheOtherOrPublishingLateResults()
+    {
+        var gsmEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var closedEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gsmRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var closedRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var store = new MemoryStore();
+        using var http = Client(async request =>
+        {
+            if (request.RequestUri!.Host == "so.example.invalid")
+            {
+                closedEntered.TrySetResult(); await closedRelease.Task;
+                return Response("""{"data":{"items":[{"sys_id":"remote","number":"REMOTE","state":"closed"}],"total":1}}""");
+            }
+            gsmEntered.TrySetResult(); await gsmRelease.Task;
+            return ReadResponse(request);
+        });
+        var controller = Create(http, store);
+        var loading = controller.SetSessionAsync(App("a"), So("so1"), true);
+        await Task.WhenAll(gsmEntered.Task, closedEntered.Task);
+        try
+        {
+            Assert.True(controller.IsGsmBusy);
+            Assert.True(controller.IsClosedBusy);
+            Assert.False(controller.ProfileLoaded);
+            controller.CancelClosed();
+            Assert.False(controller.IsClosedBusy);
+            Assert.Null(controller.ClosedLoadingMessage);
+            Assert.True(controller.IsGsmBusy);
+            controller.CancelGsm();
+            Assert.False(controller.IsBusy);
+            Assert.Null(controller.GsmLoadingMessage);
+        }
+        finally { closedRelease.TrySetResult(); gsmRelease.TrySetResult(); await loading; }
+        Assert.False(controller.ProfileLoaded);
+        Assert.Empty(controller.ClosedRequests);
+        Assert.Empty(store.Documents);
+        Assert.Null(controller.GsmErrorMessage);
+        Assert.Null(controller.ClosedErrorMessage);
+    }
+
+    [Fact]
+    public async Task CancelGsmNeverInterruptsOrReleasesAnActiveMutation()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var puts = 0;
+        using var http = Client(async request =>
+        {
+            if (request.Method == HttpMethod.Put) { puts++; entered.TrySetResult(); await release.Task; return Response("{}"); }
+            return ReadResponse(request);
+        });
+        var controller = Create(http, new MemoryStore());
+        await controller.SetSessionAsync(App("a"), null, true);
+        JsonObject Route() => new() { ["date"] = controller.Month + "-01", ["workType"] = "POS", ["sent"] = false, ["stops"] = new JsonArray() };
+        var saving = controller.SaveRouteAsync(Route());
+        await entered.Task;
+        try
+        {
+            Assert.True(controller.IsGsmMutation);
+            controller.CancelGsm();
+            Assert.True(controller.IsGsmBusy);
+            Assert.False(await controller.SaveRouteAsync(Route()));
+        }
+        finally { release.TrySetResult(); }
+        Assert.True(await saving);
+        Assert.Equal(1, puts);
+        Assert.False(controller.IsGsmMutation);
+    }
+
+    [Fact]
+    public async Task ImportRemainsDurableWhenCancelledServerReadAlreadyStartedDiskWrite()
+    {
+        var remote = false;
+        using var http = Client(request => Task.FromResult(request.RequestUri!.Host == "so.example.invalid"
+            ? Response(remote ? """{"data":{"items":[{"sys_id":"remote","number":"REMOTE","state":"closed"}],"total":1}}""" : """{"data":{"items":[],"total":0}}""")
+            : ReadResponse(request)));
+        var store = new MemoryStore();
+        var controller = Create(http, store);
+        await controller.SetSessionAsync(App("a"), So("so1"), true);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var writes = 0;
+        store.BeforeSave = async () => { if (++writes == 1) { entered.TrySetResult(); await release.Task; } };
+        remote = true;
+        var reading = controller.RefreshClosedAsync();
+        await entered.Task;
+        var importing = controller.ImportClosedAsync(Preview("MANUAL"));
+        release.TrySetResult();
+        Assert.False(await reading);
+        Assert.True(await importing);
+        var restored = Create(http, store);
+        await restored.SetSessionAsync(App("a"), So("so1"), false);
+        Assert.Equal("MANUAL", Assert.Single(restored.ClosedRequests).Number);
+    }
+
+    [Fact]
+    public async Task ConnectingSimpleOnePreservesOngoingGsmMonthRead()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fuelReads = 0;
+        using var http = Client(async request =>
+        {
+            if (request.RequestUri!.Host == "so.example.invalid") return Response("""{"data":{"items":[],"total":0}}""");
+            if (request.RequestUri!.AbsolutePath == "/api/v2/fuel") { fuelReads++; entered.TrySetResult(); await release.Task; }
+            return ReadResponse(request);
+        });
+        var controller = Create(http, new MemoryStore());
+        var loading = controller.SetSessionAsync(App("a"), null, true);
+        await entered.Task;
+        try
+        {
+            Assert.False(controller.MonthLoaded);
+            await controller.SetSessionAsync(App("a"), So("so1"), true);
+            Assert.True(controller.IsGsmBusy);
+        }
+        finally { release.TrySetResult(); await loading; }
+        Assert.True(controller.MonthLoaded);
+        Assert.NotNull(controller.LastGsmUpdated);
+        Assert.Equal(1, fuelReads);
+        Assert.False(controller.IsGsmBusy);
+    }
+
+    [Fact]
+    public async Task ConnectingSimpleOneDoesNotCancelOrRepeatAnActiveGsmMutation()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var puts = 0;
+        using var http = Client(async request =>
+        {
+            if (request.RequestUri!.Host == "so.example.invalid") return Response("""{"data":{"items":[],"total":0}}""");
+            if (request.Method == HttpMethod.Put) { puts++; entered.TrySetResult(); await release.Task; return Response("{}"); }
+            return ReadResponse(request);
+        });
+        var controller = Create(http, new MemoryStore());
+        await controller.SetSessionAsync(App("a"), null, true);
+        var saving = controller.SaveRouteAsync(new JsonObject { ["date"] = controller.Month + "-01", ["workType"] = "POS", ["sent"] = false, ["stops"] = new JsonArray() });
+        await entered.Task;
+        try
+        {
+            await controller.SetSessionAsync(App("a"), So("so1"), true);
+            Assert.True(controller.IsGsmMutation);
+        }
+        finally { release.TrySetResult(); }
+        Assert.True(await saving);
+        Assert.Equal(1, puts);
+    }
+
     private static WorkspaceController Create(HttpClient http, MemoryStore store) => new(new GsmApi(new Uri("https://luma.example.invalid"), http),
         new SimpleOneClosedRequestsApi(new Uri("https://so.example.invalid/v1"), http, new("11", "22", "33")), store, "synthetic-origins");
     private static AppSession App(string id) => new("secret-token-" + id, new(id, id + "@example.invalid", "engineer"));

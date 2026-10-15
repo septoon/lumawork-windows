@@ -45,6 +45,38 @@ function Wait-Text([string]$fragment) {
     throw "UI text missing: $fragment"
 }
 
+function Select-Page([string]$name) {
+    $element = Wait-Ui $name
+    $element.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+}
+function Save-UiScreenshot([string]$name) {
+    Add-Type -AssemblyName System.Drawing
+    $directory = Join-Path $repoRoot 'artifacts/tests/ui'
+    $null = New-Item -ItemType Directory -Path $directory -Force
+    $bounds = $script:root.Current.BoundingRectangle
+    $bitmap = New-Object System.Drawing.Bitmap([int]$bounds.Width, [int]$bounds.Height)
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $graphics.CopyFromScreen([int]$bounds.X, [int]$bounds.Y, 0, 0, $bitmap.Size)
+        $bitmap.Save((Join-Path $directory ($name + '.png')), [System.Drawing.Imaging.ImageFormat]::Png)
+    } finally { $graphics.Dispose(); $bitmap.Dispose() }
+}
+function Choose-Xlsx([string]$path) {
+    $field = $null
+    $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty, '1148')
+    for ($i = 0; $i -lt 60; $i++) {
+        $field = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+        if ($field) { break }
+        Start-Sleep -Milliseconds 250
+    }
+    if (-not $field) { throw 'Native file picker did not expose its file-name field.' }
+    $field.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($path)
+    $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, 'Open')
+    $open = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+    if (-not $open) { throw 'Native file picker Open button not found.' }
+    $open.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+}
+
 try {
     $portProbe = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, 0)
     $portProbe.Start(); $port = $portProbe.LocalEndpoint.Port; $portProbe.Stop()
@@ -63,22 +95,42 @@ try {
         if ($application) { $script:root = [System.Windows.Automation.AutomationElement]::FromHandle($application.MainWindowHandle); break }
     }
     if (-not $script:root) { throw 'Application window not found.' }
+    $script:root.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).SetWindowVisualState([System.Windows.Automation.WindowVisualState]::Maximized)
     Set-Ui 'EmailBox' 'smoke@example.invalid'
     Invoke-Ui 'LoginButton' $true
     Set-Ui 'CodeBox' '000000'
     Invoke-Ui 'LoginButton' $true
     Wait-Text 'Workspace Smoke Engineer'
+    $null = Wait-Ui 'Обновить профиль'
+    Save-UiScreenshot '01-profile'
+    Invoke-Ui 'Изменить профиль'
+    $null = Wait-Ui 'Сохранить в LumaWork'
+    Save-UiScreenshot '02-profile-editor'
+    Set-Ui 'Profile.employeeFullName' 'Edited Smoke Engineer'
+    Invoke-Ui 'Сохранить в LumaWork'
+    Wait-Text 'Edited Smoke Engineer'
+    $null = Wait-Ui 'Обновить профиль'
+    Write-Output 'PASS: separate profile screen displays server values and grouped editor saves changes with server readback.'
+
+    Select-Page 'Месячный отчёт'
     Wait-Text 'Smoke Route Address'
-    $null = Wait-Ui 'Импорт ГСМ XLSX'
+    Save-UiScreenshot '03-monthly-report'
     Invoke-Ui 'Сформировать и отправить отчёт'
     Invoke-Ui 'Сформировать и отправить'
     Wait-Text 'Smoke.xlsx отправлен'
-    Write-Output 'PASS: authenticated workspace loaded profile/routes, encrypted cache persisted, confirmed report POST completed through the loopback API.'
+    Write-Output 'PASS: monthly report screen loads routes and sends the confirmed report through the synthetic API.'
 
-    $navigation = Wait-Ui 'Заявки'
-    $selection = $navigation.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
-    $selection.Select()
-    $null = Wait-Ui 'Импорт заявок XLSX'
+    Select-Page 'Заявки'
+    Save-UiScreenshot '04-requests-empty'
+    Invoke-Ui 'Выбрать XLSX с заявками'
+    Choose-Xlsx (Join-Path $repoRoot 'artifacts/tests/smoke-requests.xlsx')
+    Wait-Text 'MANUAL-CLOSED'
+    Invoke-Ui 'Импортировать'
+    Wait-Text 'Импортировано: 1'
+    Wait-Text 'Manual Import Address'
+    Save-UiScreenshot '05-manual-import'
+    Write-Output 'PASS: native file picker imported a real synthetic XLSX and displayed its address without SimpleOne authorization.'
+
     Invoke-Ui 'Войти в SimpleOne'
     Set-Ui 'SoUsername' 'smoke'
     Set-Ui 'SoPassword' 'synthetic-password'
@@ -86,10 +138,12 @@ try {
     Wait-Text 'SMOKE-CLOSED'
     Wait-Text 'Smoke Closed Address'
     if (Find-Ui 'SMOKE-OPEN') { throw 'Open request leaked into the closed archive.' }
-    Invoke-Ui 'Обновить'
+    Invoke-Ui 'Обновить из SimpleOne'
     Wait-Text 'Smoke Closed Address'
-    Write-Output 'PASS: separate SimpleOne login loaded closed addresses, excluded an open request, and manual-import/refresh controls are available.'
+    Save-UiScreenshot '06-simpleone-requests'
+    Write-Output 'PASS: separate SimpleOne login loaded closed addresses, excluded an open request, and refreshed independently.'
 } catch {
+    if ($script:root) { try { Save-UiScreenshot 'failure' } catch {} }
     if ($script:root) {
         $all = $script:root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
         foreach ($element in $all) { if ($element.Current.Name) { Write-Output ("UI: " + $element.Current.ControlType.ProgrammaticName + " | " + $element.Current.Name) } }

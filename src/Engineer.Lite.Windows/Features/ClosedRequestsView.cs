@@ -15,39 +15,48 @@ internal sealed class ClosedRequestsView : UserControl
     private readonly TextBlock summary=WorkspaceUi.Text("",true);
     private readonly InfoBar notice=new(){IsClosable=false};
     private readonly ProgressBar progress=new(){IsIndeterminate=true,Visibility=Visibility.Collapsed};
-    private readonly Button import,refresh,add;private string previousScope="";
+    private readonly Button import,refresh,add,copy,cancel;private readonly TextBlock empty=WorkspaceUi.Text("",true),loading=WorkspaceUi.Text("",true);private string previousScope="";private bool dialogOpen;private string? localError;
+    internal ContentControl ConnectionHost {get;}=new(){HorizontalContentAlignment=HorizontalAlignment.Stretch};
     internal ClosedRequestsView(Window owner,WorkspaceController workspace,Func<string> scope,Func<bool> online,Func<Task> reconnect)
     {
         this.owner=owner;this.workspace=workspace;this.scope=scope;this.online=online;this.reconnect=reconnect;
-        var panel=new StackPanel{Spacing=12};var toolbar=new StackPanel{Orientation=Orientation.Horizontal,Spacing=8};
-        import=WorkspaceUi.Button("Импорт заявок XLSX",Import_Click);refresh=WorkspaceUi.Button("Обновить",Refresh_Click);toolbar.Children.Add(import);toolbar.Children.Add(refresh);panel.Children.Add(toolbar);
-        panel.Children.Add(progress);panel.Children.Add(notice);panel.Children.Add(summary);panel.Children.Add(search);
+        var panel=new StackPanel{Spacing=16};
+        import=WorkspaceUi.Button("Выбрать XLSX с заявками",Import_Click,true);
+        panel.Children.Add(WorkspaceUi.Card("Загрузка из Excel","1. В SimpleOne откройте свои закрытые заявки и экспортируйте список в Excel.\n2. Выберите полученный .xlsx здесь. Проверьте предпросмотр и подтвердите импорт.\nВход в SimpleOne в приложении для этого не требуется.",import));
+        refresh=WorkspaceUi.Button("Обновить из SimpleOne",Refresh_Click);cancel=WorkspaceUi.Button("Остановить загрузку",(_,_)=>workspace.CancelClosed());
+        var sync=new StackPanel{Orientation=Orientation.Horizontal,Spacing=8};sync.Children.Add(refresh);sync.Children.Add(cancel);
+        panel.Children.Add(WorkspaceUi.Card("Автоматическая загрузка","Подключите SimpleOne ниже. Заявки обновляются автоматически каждые 5 минут; можно обновить вручную.",ConnectionHost,sync,progress,loading));
+        panel.Children.Add(notice);
+        var archive=new StackPanel{Spacing=12};archive.Children.Add(summary);archive.Children.Add(search);archive.Children.Add(empty);
         search.TextChanged+=(_,_)=>RenderList();
-        panel.Children.Add(new TextBlock{Text="Номер заявки  ·  Адрес",FontWeight=Microsoft.UI.Text.FontWeights.SemiBold});
+        archive.Children.Add(new TextBlock{Text="Номер заявки                         Адрес",FontWeight=Microsoft.UI.Text.FontWeights.SemiBold});
         list.ItemTemplate=(DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load("<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'><Grid ColumnSpacing='16' Padding='0,6'><Grid.ColumnDefinitions><ColumnDefinition Width='150'/><ColumnDefinition Width='*'/></Grid.ColumnDefinitions><TextBlock Text='{Binding Number}'/><TextBlock Grid.Column='1' Text='{Binding Address}' TextWrapping='Wrap'/></Grid></DataTemplate>");
-        panel.Children.Add(list);var actions=new StackPanel{Orientation=Orientation.Horizontal,Spacing=8};
-        actions.Children.Add(WorkspaceUi.Button("Копировать адрес",Copy_Click));add=WorkspaceUi.Button("Добавить в маршрут",AddRoute_Click);actions.Children.Add(add);panel.Children.Add(actions);
+        archive.Children.Add(list);var actions=new StackPanel{Orientation=Orientation.Horizontal,Spacing=8};
+        copy=WorkspaceUi.Button("Копировать адрес",Copy_Click);actions.Children.Add(copy);add=WorkspaceUi.Button("Добавить в маршрут",AddRoute_Click);actions.Children.Add(add);archive.Children.Add(actions);
+        panel.Children.Add(WorkspaceUi.Card("Закрытые заявки","Выберите строку, чтобы скопировать адрес или добавить его в маршрут отчётного месяца.",archive));
+        list.SelectionChanged+=(_,_)=>RenderActions();
         Content=panel;workspace.Changed+=Render;Render();
     }
     internal void Render()
     {
-        if(previousScope!=scope()){previousScope=scope();search.Text="";}
-        import.IsEnabled=!workspace.IsBusy;refresh.IsEnabled=!workspace.IsBusy;add.IsEnabled=!workspace.IsBusy&&online();progress.Visibility=workspace.IsBusy?Visibility.Visible:Visibility.Collapsed;
-        summary.Text=$"В архиве: {workspace.ClosedRequests.Count}."+(workspace.LastClosedUpdated is { } at?$" Обновлено {at.ToLocalTime():g}.":"")+" Поиск идёт по всему загруженному архиву; импорт не гарантирует полноту истории.";
-        notice.Message=workspace.ErrorMessage??workspace.InfoMessage??"";notice.Severity=workspace.ErrorMessage!=null?InfoBarSeverity.Error:InfoBarSeverity.Success;notice.IsOpen=notice.Message.Length>0;
+        if(previousScope!=scope()){previousScope=scope();localError=null;search.Text="";}
+        import.IsEnabled=!dialogOpen;refresh.IsEnabled=!workspace.IsClosedBusy;cancel.Visibility=workspace.IsClosedBusy?Visibility.Visible:Visibility.Collapsed;progress.Visibility=workspace.IsClosedBusy?Visibility.Visible:Visibility.Collapsed;loading.Text=workspace.ClosedLoadingMessage??"";loading.Visibility=workspace.IsClosedBusy?Visibility.Visible:Visibility.Collapsed;
+        summary.Text=$"В архиве: {workspace.ClosedRequests.Count}."+(workspace.LastClosedUpdated is { } at?$" Обновлено {at.ToLocalTime():g}.":"")+" Поиск по номеру и адресу.";
+        notice.Message=localError??workspace.ClosedErrorMessage??workspace.ClosedInfoMessage??"";notice.Severity=localError!=null||workspace.ClosedErrorMessage!=null?InfoBarSeverity.Error:InfoBarSeverity.Success;notice.IsOpen=notice.Message.Length>0;
         RenderList();
     }
     private void RenderList()
     {
         var selected=(list.SelectedItem as ClosedRequest)?.Number;var query=search.Text.Trim();
         var records=workspace.ClosedRequests.Where(r=>query.Length==0||r.Number.Contains(query,StringComparison.OrdinalIgnoreCase)||r.Address.Contains(query,StringComparison.OrdinalIgnoreCase)).ToArray();
-        list.ItemsSource=records;list.SelectedItem=records.FirstOrDefault(r=>r.Number==selected);
+        list.ItemsSource=records;list.SelectedItem=records.FirstOrDefault(r=>r.Number==selected);empty.Text=query.Length>0?"Ничего не найдено. Измените запрос.":"Архив пуст. Загрузите файл Excel или подключите SimpleOne выше.";empty.Visibility=records.Length==0?Visibility.Visible:Visibility.Collapsed;RenderActions();
     }
-    private void Error(string message){notice.Message=message;notice.Severity=InfoBarSeverity.Error;notice.IsOpen=true;}
-    private async void Refresh_Click(object sender,RoutedEventArgs e){await reconnect();await workspace.RefreshClosedAsync();}
+    private void RenderActions(){var selected=list.SelectedItem is ClosedRequest{Address.Length:>0};copy.IsEnabled=selected;add.IsEnabled=selected&&online()&&!workspace.IsGsmBusy&&workspace.MonthLoaded;}
+    private void Error(string message){localError=message;notice.Message=message;notice.Severity=InfoBarSeverity.Error;notice.IsOpen=true;}
+    private async void Refresh_Click(object sender,RoutedEventArgs e){localError=null;await reconnect();await workspace.RefreshClosedAsync();}
     private async void Import_Click(object sender,RoutedEventArgs e)
     {
-        var captured=scope();
+        if(dialogOpen)return;localError=null;dialogOpen=true;Render();var captured=scope();
         try
         {
             var book=await WorkspaceUi.PickAsync(owner,true);if(book==null||captured!=scope())return;
@@ -58,6 +67,7 @@ internal sealed class ClosedRequestsView : UserControl
             if(await WorkspaceUi.ConfirmAsync(XamlRoot,"Импортировать заявки?",previewText,"Импортировать")&&captured==scope())await workspace.ImportClosedAsync(preview);
         }
         catch(Exception ex){if(captured==scope())Error(WorkspaceUi.Message(ex));}
+        finally{dialogOpen=false;Render();}
     }
     private void Copy_Click(object sender,RoutedEventArgs e)
     {

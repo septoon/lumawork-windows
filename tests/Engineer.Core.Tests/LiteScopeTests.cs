@@ -6,12 +6,14 @@ namespace Engineer.Core.Tests;
 public sealed class LiteScopeTests
 {
     [Fact]
-    public void LiteScope_HasOnlyHomeAndClosedRequests()
+    public void LiteScope_SeparatesProfileRequestsAndMonthlyReport()
     {
         Assert.Collection(LiteNavigation.Sections,
-            home => Assert.Equal(("home", "Главная"), (home.Key, home.Title)),
-            requests => Assert.Equal(("requests", "Заявки"), (requests.Key, requests.Title)));
+            profile => Assert.Equal(("profile", "Профиль"), (profile.Key, profile.Title)),
+            requests => Assert.Equal(("requests", "Заявки"), (requests.Key, requests.Title)),
+            home => Assert.Equal(("home", "Месячный отчёт"), (home.Key, home.Title)));
 
+        Assert.Equal(LiteSection.Profile, LiteNavigation.Restore("profile"));
         Assert.Equal(LiteSection.Home, LiteNavigation.Restore("home"));
         Assert.Equal(LiteSection.ClosedRequests, LiteNavigation.Restore("requests"));
     }

@@ -22,7 +22,13 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
     private SimpleOneSession? so;
     private bool online;
     private long revision;
-    private CancellationTokenSource? operation;
+    private CancellationTokenSource? gsmOperation;
+    private CancellationTokenSource? closedOperation;
+    private bool closedReading;
+    private bool gsmReading;
+    private string? gsmLoadingMessage;
+    private readonly SemaphoreSlim gsmPersistence = new(1, 1);
+    private readonly SemaphoreSlim closedPersistence = new(1, 1);
     private JsonObject? pendingReport;
     private bool gsmCacheLoaded;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true };
@@ -32,9 +38,20 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
     public GsmMonthData MonthData { get; private set; } = new(DateTime.Now.ToString("yyyy-MM", CultureInfo.InvariantCulture), [], [], null);
     public IReadOnlyList<JsonObject> Jobs { get; private set; } = [];
     public IReadOnlyList<ClosedRequest> ClosedRequests { get; private set; } = [];
-    public bool IsBusy => operation != null;
-    public string? ErrorMessage { get; private set; }
-    public string? InfoMessage { get; private set; }
+    public bool IsGsmBusy => gsmOperation != null;
+    public bool IsGsmMutation => IsGsmBusy && !gsmReading;
+    public string? GsmLoadingMessage => IsGsmBusy ? gsmLoadingMessage : null;
+    public bool IsClosedBusy => closedOperation != null;
+    public bool IsBusy => IsGsmBusy || IsClosedBusy;
+    public bool ProfileLoaded { get; private set; }
+    public bool MonthLoaded { get; private set; }
+    public string? GsmErrorMessage { get; private set; }
+    public string? GsmInfoMessage { get; private set; }
+    public string? ClosedErrorMessage { get; private set; }
+    public string? ClosedInfoMessage { get; private set; }
+    public string? ClosedLoadingMessage => IsClosedBusy ? closedReading ? "Загружаем закрытые заявки SimpleOne. Архив останется доступен; загрузку можно остановить." : "Сохраняем импорт заявок…" : null;
+    public string? ErrorMessage => GsmErrorMessage ?? ClosedErrorMessage;
+    public string? InfoMessage => GsmInfoMessage ?? ClosedInfoMessage;
     public DateTimeOffset? LastGsmUpdated { get; private set; }
     public DateTimeOffset? LastClosedUpdated { get; private set; }
     public bool GenerationUnknown => pendingReport != null || app != null && !gsmCacheLoaded;
@@ -50,54 +67,71 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
             && this.so?.User.Id == so?.User.Id && this.so?.AuthKey == so?.AuthKey && this.online == online) return;
         var appChanged = this.app?.User.Id != app?.User.Id || this.app?.Token != app?.Token;
         var soChanged = this.so?.User.Id != so?.User.Id || this.so?.AuthKey != so?.AuthKey;
-        RequiresReauthentication = false; RequiresSimpleOneReauthentication = false;
-        Cancel();
+        var gsmSessionChanged = appChanged || this.online != online;
+        if (gsmSessionChanged)
+        {
+            Cancel();
+            GsmErrorMessage = null; GsmInfoMessage = null; RequiresReauthentication = false;
+        }
+        else
+        {
+            // SimpleOne credentials cannot invalidate a GSM read or an in-flight GSM mutation.
+            closedOperation?.Cancel(); closedOperation = null; closedReading = false;
+        }
         this.app = app; this.so = so; this.online = online;
-        ErrorMessage = null; InfoMessage = null; RequiresReauthentication = false; RequiresSimpleOneReauthentication = false;
+        ClosedErrorMessage = null; ClosedInfoMessage = null; RequiresSimpleOneReauthentication = false;
         if (appChanged) ClearGsm();
         if (appChanged || soChanged) { ClosedRequests = []; LastClosedUpdated = null; }
         Changed?.Invoke();
         if (app == null) return;
-        await RunAsync(async (context, ct) =>
+        // Each domain owns its operation. A large SimpleOne archive must not lock GSM work.
+        var gsmTask = gsmSessionChanged ? RunAsync(async (context, ct) =>
         {
             if (appChanged) await TryPartAsync(() => LoadGsmAsync(context, ct), context, ct);
-            if (appChanged || soChanged) await TryPartAsync(() => LoadClosedAsync(context, ct), context, ct);
-            Check(context, ct); Changed?.Invoke(); // Cached values are visible while the network refresh runs.
-            if (context.Online)
-            {
-                if (appChanged || !soChanged) await TryPartAsync(() => FetchGsmAsync(context, ct), context, ct);
-                if (context.SimpleOne != null) await TryPartAsync(() => FetchClosedAsync(context, ct), context, ct);
-            }
-        });
+            Check(context, ct); Changed?.Invoke();
+            if (context.Online) await FetchGsmAsync(context, ct);
+        }, reading: true) : Task.FromResult(true);
+        var closedTask = appChanged || soChanged || online ? RunAsync(async (context, ct) =>
+        {
+            if (appChanged || soChanged) await TryPartAsync(() => LoadClosedAsync(context, ct), context, ct, closedDomain: true);
+            Check(context, ct); Changed?.Invoke();
+            if (context.Online && context.SimpleOne != null) await FetchClosedAsync(context, ct);
+        }, closedDomain: true, reading: true) : Task.FromResult(true);
+        await Task.WhenAll(gsmTask, closedTask);
     }
 
     public async Task<bool> SelectMonthAsync(string month)
     {
         if (!GsmValues.IsValidMonth(month)) return Fail("Месяц должен быть в формате YYYY-MM.");
         if (Month == month) return true;
-        Cancel(); Month = month; ClearGsm(); Changed?.Invoke();
+        if (IsGsmBusy) return false;
+        Month = month; ClearGsm(); Changed?.Invoke();
         return await RunAsync(async (context, ct) =>
         {
             await TryPartAsync(() => LoadGsmAsync(context, ct), context, ct);
             Check(context, ct); Changed?.Invoke();
             if (context.Online) await FetchGsmAsync(context, ct);
-        });
+        }, reading: true);
     }
 
-    public Task<bool> RefreshGsmAsync() => RunAsync(FetchGsmAsync, requireOnline: true);
+    public Task<bool> RefreshGsmAsync() => RunAsync(FetchGsmAsync, requireOnline: true, reading: true);
     public Task<bool> RefreshClosedAsync()
     {
-        if (so == null) return Task.FromResult(Fail("Подключите SimpleOne или импортируйте XLSX вручную."));
-        return RunAsync(FetchClosedAsync, requireOnline: true);
+        if (so == null) return Task.FromResult(Fail("Подключите SimpleOne или импортируйте XLSX вручную.", closedDomain: true));
+        return RunAsync(FetchClosedAsync, requireOnline: true, closedDomain: true, reading: true);
     }
-    public Task<bool> ImportClosedAsync(ClosedRequestsImportPreview preview) => RunAsync(async (context, ct) =>
+    public Task<bool> ImportClosedAsync(ClosedRequestsImportPreview preview)
     {
-        var records = ClosedRequestsMerge.Upsert(ClosedRequests, preview.Records);
-        var updated = DateTimeOffset.UtcNow;
-        await SaveAsync(context.ClosedKey, new JsonObject { ["version"] = 1, ["records"] = Node(records), ["updatedAt"] = updated.ToString("O") }, context, ct);
-        ClosedRequests = records; LastClosedUpdated = updated;
-        InfoMessage = $"Импортировано: {preview.Records.Count}. Отклонено: {preview.RejectedCount}. Без адреса: {preview.MissingAddressCount}.";
-    });
+        CancelClosed(); // An explicit import replaces an unfinished server read, never a mutation.
+        return RunAsync(async (context, ct) =>
+        {
+            var records = ClosedRequestsMerge.Upsert(ClosedRequests, preview.Records);
+            var updated = DateTimeOffset.UtcNow;
+            await SaveAsync(context.ClosedKey, new JsonObject { ["version"] = 1, ["records"] = Node(records), ["updatedAt"] = updated.ToString("O") }, context, ct, closedDomain: true);
+            ClosedRequests = records; LastClosedUpdated = updated;
+            ClosedInfoMessage = $"Импортировано: {preview.Records.Count}. Отклонено: {preview.RejectedCount}. Без адреса: {preview.MissingAddressCount}.";
+        }, closedDomain: true);
+    }
     public Task<bool> SaveProfileAsync(JsonObject profile) => MutateAsync((context, ct) => gsm.SaveProfileAsync(context.App.Token, profile, ct));
     public Task<bool> SaveRouteAsync(JsonObject route) => MutateAsync((context, ct) => gsm.SaveRouteAsync(context.App.Token, route, ct));
     public Task<bool> SaveRefuelAsync(JsonObject fuel) => MutateAsync((context, ct) => gsm.SaveRefuelAsync(context.App.Token, fuel, ct));
@@ -108,7 +142,7 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
         {
             await mutation(context, ct); Check(context, ct);
             await FetchGsmAsync(context, ct);
-            InfoMessage = "Изменения сохранены и проверены загрузкой с сервера.";
+            GsmInfoMessage = "Изменения сохранены и проверены загрузкой с сервера.";
         }
         catch (ArgumentException) { throw; }
         catch (Exception error) when (error is not OperationCanceledException || !ct.IsCancellationRequested)
@@ -125,7 +159,7 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
         if (ProfileResult.Profile is not { } profile) throw new ArgumentException("Заполните профиль ГСМ перед отправкой отчёта.");
         var errors = GsmProfileValidation.Validate(profile, ProfileResult.AvailableFuelTypes);
         if (errors.Count > 0) throw new ArgumentException(string.Join(Environment.NewLine, errors));
-        if (MonthData.Month != context.Month || !GsmValues.IsValidMonth(context.Month)) throw new ArgumentException("Обновите данные выбранного месяца.");
+        if (!MonthLoaded || MonthData.Month != context.Month || !GsmValues.IsValidMonth(context.Month)) throw new ArgumentException("Обновите данные выбранного месяца.");
         if (string.CompareOrdinal(context.Month, GsmValues.Text(profile, "reportStartMonth")) < 0) throw new ArgumentException("Месяц отчёта раньше начального месяца профиля.");
         if (MonthData.Routes.Count > 31)
             throw new ArgumentException("В отчёте допускается не более 31 строки маршрутов суммарно для POS и ARM.");
@@ -140,7 +174,7 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
             var result = await gsm.SendReportAsync(context.App.Token, context.Month, ct);
             Check(context, ct);
             // Only an explicit sent/status=SENT result confirms email delivery.
-            InfoMessage = result.Message;
+            GsmInfoMessage = result.Message;
             if (result.ConfirmsEmailDelivery)
             {
                 await SaveGsmAsync(context, ProfileResult, Projects, MonthData, Jobs, LastGsmUpdated, null, ct);
@@ -167,7 +201,22 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
 
     public void Cancel()
     {
-        revision++; operation?.Cancel(); operation = null;
+        revision++; gsmOperation?.Cancel(); closedOperation?.Cancel();
+        gsmOperation = null; closedOperation = null; closedReading = false; gsmReading = false; gsmLoadingMessage = null;
+        Changed?.Invoke();
+    }
+
+    public void CancelGsm()
+    {
+        if (!gsmReading || gsmOperation == null) return;
+        gsmOperation.Cancel(); gsmOperation = null; gsmReading = false; gsmLoadingMessage = null;
+        Changed?.Invoke();
+    }
+
+    public void CancelClosed()
+    {
+        if (!closedReading || closedOperation == null) return;
+        closedOperation.Cancel(); closedOperation = null; closedReading = false;
         Changed?.Invoke();
     }
 
@@ -177,9 +226,16 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
         // Do not overwrite an unread pending report marker with a fresh network snapshot.
         if (!gsmCacheLoaded) await LoadGsmAsync(context, ct);
         Check(context, ct);
+        GsmProgress("Загружаем профиль ГСМ…");
         var profile = await gsm.FetchProfileAsync(context.App.Token, ct); Check(context, ct);
+        ProfileResult = profile; ProfileLoaded = true; Changed?.Invoke();
+        GsmProgress("Загружаем проекты ГСМ…");
         var projects = await gsm.FetchProjectsAsync(context.App.Token, ct); Check(context, ct);
+        Projects = projects; Changed?.Invoke();
+        GsmProgress("Загружаем маршруты, заправки и одометр месяца…");
         var month = await gsm.FetchMonthAsync(context.App.Token, context.Month, ct); Check(context, ct);
+        MonthData = month; MonthLoaded = true; Changed?.Invoke();
+        GsmProgress("Загружаем историю отчётов ГСМ…");
         var jobs = await gsm.FetchJobsAsync(context.App.Token, ct); Check(context, ct);
         var updated = DateTimeOffset.UtcNow;
         var pending = ResolvePending(pendingReport, jobs);
@@ -205,7 +261,7 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
         Check(context, ct);
         var records = ClosedRequestsMerge.Upsert(ClosedRequests, fetched);
         var updated = DateTimeOffset.UtcNow;
-        await SaveAsync(context.ClosedKey, new JsonObject { ["version"] = 1, ["records"] = Node(records), ["updatedAt"] = updated.ToString("O") }, context, ct);
+        await SaveAsync(context.ClosedKey, new JsonObject { ["version"] = 1, ["records"] = Node(records), ["updatedAt"] = updated.ToString("O") }, context, ct, closedDomain: true);
         Check(context, ct); ClosedRequests = records; LastClosedUpdated = updated;
     }
     private async Task LoadGsmAsync(Context context, CancellationToken ct)
@@ -225,7 +281,7 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
             throw new InvalidDataException("Не удалось проверить сохранённое состояние отправки отчёта. Повторная отправка заблокирована.");
         ProfileResult = profile; Projects = projects; MonthData = month; Jobs = jobs;
         LastGsmUpdated = Timestamp(document, "updatedAt"); pendingReport = marker?.DeepClone() as JsonObject;
-        gsmCacheLoaded = true;
+        gsmCacheLoaded = true; ProfileLoaded = true; MonthLoaded = true;
     }
     private async Task LoadClosedAsync(Context context, CancellationToken ct)
     {
@@ -238,10 +294,17 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
         IReadOnlyList<JsonObject> jobs, DateTimeOffset? updated, JsonObject? pending, CancellationToken ct)
         => SaveAsync(context.GsmKey, new JsonObject { ["version"] = 1, ["profileResult"] = Node(profile), ["projects"] = Node(projects),
             ["monthData"] = Node(month), ["jobs"] = Node(jobs), ["updatedAt"] = updated?.ToString("O"), ["pendingReport"] = pending?.DeepClone() }, context, ct);
-    private async Task SaveAsync(string key, JsonObject document, Context context, CancellationToken ct)
+    private async Task SaveAsync(string key, JsonObject document, Context context, CancellationToken ct, bool closedDomain = false)
     {
-        Check(context, ct); ScrubCredentials(document);
-        await store.SaveAsync(key, document, ct); Check(context, ct);
+        // A store may complete an atomic disk write after cancellation. Keep a newer import/marker last.
+        var gate = closedDomain ? closedPersistence : gsmPersistence;
+        await gate.WaitAsync(ct);
+        try
+        {
+            Check(context, ct); ScrubCredentials(document);
+            await store.SaveAsync(key, document, ct); Check(context, ct);
+        }
+        finally { gate.Release(); }
     }
     private static JsonObject? ResolvePending(JsonObject? pending, IReadOnlyList<JsonObject> jobs)
     {
@@ -254,29 +317,44 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
         // A new terminal job is still ambiguous if another new job is processing.
         return candidates.Length == 1 && GsmValues.Text(candidates[0], "status").ToUpperInvariant() is "SENT" or "FAILED" or "SKIPPED" ? null : pending;
     }
-    private async Task TryPartAsync(Func<Task> action, Context context, CancellationToken ct)
+    private async Task TryPartAsync(Func<Task> action, Context context, CancellationToken ct, bool closedDomain = false)
     {
         try { await action(); }
         catch (Exception error) when (error is not OperationCanceledException || !ct.IsCancellationRequested)
-        { Check(context, ct); SetError(error); }
+        { Check(context, ct); SetError(error, closedDomain); }
     }
-    private async Task<bool> RunAsync(Func<Context, CancellationToken, Task> action, bool requireOnline = false)
+    private async Task<bool> RunAsync(Func<Context, CancellationToken, Task> action, bool requireOnline = false, bool closedDomain = false, bool reading = false)
     {
-        if (IsBusy) return false;
-        if (app == null) return Fail("Войдите в LumaWork.");
-        if (requireOnline && !online) return Fail("Для этого действия требуется подключение к LumaWork.");
+        if (closedDomain ? IsClosedBusy : IsGsmBusy) return false;
+        if (app == null) return Fail("Войдите в LumaWork.", closedDomain);
+        if (requireOnline && !online) return Fail("Для этого действия требуется подключение к LumaWork.", closedDomain);
         var context = new Context(revision, app, so, online, Month, CacheKey("gsm", app.User.Id, Month), so == null ? CacheKey("closed", app.User.Id, "manual") : CacheKey("closed", app.User.Id, "simpleone", so.User.Id));
-        using var owned = new CancellationTokenSource(); operation = owned;
-        ErrorMessage = null; InfoMessage = null; RequiresReauthentication = false; Changed?.Invoke();
-        try { await action(context, owned.Token); Check(context, owned.Token); return ErrorMessage == null; }
+        using var owned = new CancellationTokenSource();
+        if (closedDomain)
+        {
+            closedOperation = owned; closedReading = reading;
+            ClosedErrorMessage = null; ClosedInfoMessage = null; RequiresSimpleOneReauthentication = false;
+        }
+        else
+        {
+            gsmOperation = owned; gsmReading = reading; gsmLoadingMessage = reading ? "Читаем сохранённые данные ГСМ…" : "Сохраняем изменения ГСМ…";
+            GsmErrorMessage = null; GsmInfoMessage = null; RequiresReauthentication = false;
+        }
+        Changed?.Invoke();
+        try { await action(context, owned.Token); Check(context, owned.Token); return (closedDomain ? ClosedErrorMessage : GsmErrorMessage) == null; }
         catch (OperationCanceledException) when (owned.IsCancellationRequested || revision != context.Revision) { return false; }
         catch (Exception error)
         {
             if (owned.IsCancellationRequested || revision != context.Revision) return false;
-            SetError(error); return false;
+            SetError(error, closedDomain); return false;
         }
-        finally { if (ReferenceEquals(operation, owned)) { operation = null; Changed?.Invoke(); } }
+        finally
+        {
+            if (closedDomain && ReferenceEquals(closedOperation, owned)) { closedOperation = null; closedReading = false; Changed?.Invoke(); }
+            else if (!closedDomain && ReferenceEquals(gsmOperation, owned)) { gsmOperation = null; gsmReading = false; gsmLoadingMessage = null; Changed?.Invoke(); }
+        }
     }
+    private void GsmProgress(string message) { gsmLoadingMessage = message; Changed?.Invoke(); }
     private void Check(Context context, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
@@ -285,13 +363,18 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
     private void ClearGsm()
     {
         ProfileResult = new(null, []); Projects = []; MonthData = new(Month, [], [], null); Jobs = [];
-        LastGsmUpdated = null; pendingReport = null; gsmCacheLoaded = false;
+        LastGsmUpdated = null; pendingReport = null; gsmCacheLoaded = false; ProfileLoaded = false; MonthLoaded = false;
     }
-    private bool Fail(string message) { ErrorMessage = message; InfoMessage = null; Changed?.Invoke(); return false; }
-    private void SetError(Exception error)
+    private bool Fail(string message, bool closedDomain = false)
     {
-        RequiresReauthentication |= error is AuthException { InvalidatesSession: true };
-        ErrorMessage = error switch
+        if (closedDomain) { ClosedErrorMessage = message; ClosedInfoMessage = null; }
+        else { GsmErrorMessage = message; GsmInfoMessage = null; }
+        Changed?.Invoke(); return false;
+    }
+    private void SetError(Exception error, bool closedDomain = false)
+    {
+        if (!closedDomain) RequiresReauthentication |= error is AuthException { InvalidatesSession: true };
+        var message = error switch
         {
             AuthException or ArgumentException or InvalidOperationException or InvalidDataException => error.Message,
             IOException => "Не удалось прочитать или сохранить данные на компьютере. Проверьте хранилище и повторите.",
@@ -299,6 +382,7 @@ public sealed class WorkspaceController(GsmApi gsm, SimpleOneClosedRequestsApi c
             OperationCanceledException => "Сервер не ответил вовремя. Сохранённые данные не изменены.",
             _ => "Не удалось обработать данные. Сохранённые данные не изменены; повторите обновление."
         };
+        if (closedDomain) ClosedErrorMessage = message; else GsmErrorMessage = message;
     }
     private string CacheKey(params string[] parts) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new[] { originScope }.Concat(parts))))).ToLowerInvariant();
     private static JsonNode? Node<T>(T value) => JsonSerializer.SerializeToNode(value, JsonOptions);

@@ -37,7 +37,7 @@ internal sealed class AuthTransport
         else
         {
             request.Headers.Add("X-LumaWork-Version", "0.1.0");
-            request.Headers.Add("X-LumaWork-Build", "4");
+            request.Headers.Add("X-LumaWork-Build", "5");
             if (credential != null) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", credential);
         }
         if (body != null) request.Content = JsonContent.Create(body);

@@ -1,6 +1,8 @@
 """Loopback-only synthetic API for the Windows UI smoke. Never contacts production."""
 import argparse
 import json
+from pathlib import Path
+from zipfile import ZipFile
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
@@ -8,6 +10,7 @@ from urllib.parse import urlparse
 
 class Handler(BaseHTTPRequestHandler):
     requests_seen = []
+    saved_profile = None
     def log_message(self, *_args):
         pass
 
@@ -15,6 +18,9 @@ class Handler(BaseHTTPRequestHandler):
         self.respond()
 
     def do_POST(self):
+        self.respond()
+
+    def do_PUT(self):
         self.respond()
 
     def read_body(self):
@@ -42,6 +48,9 @@ class Handler(BaseHTTPRequestHandler):
             "fuelCardNumber", "carModel", "licensePlate")}
         profile.update(employeeFullName="Workspace Smoke Engineer", employeePhone="9991112233",
                        posProjectId="smoke-pos", fuelNorm=9, fuelTypes=["АИ-95"], reportStartMonth="2020-01")
+        if self.command == "PUT" and path == "/api/v2/gsm/profile":
+            Handler.saved_profile = body
+        profile = Handler.saved_profile or profile
         user = {"id": "workspace-smoke", "email": "smoke@example.invalid", "role": "engineer"}
         responses = {
             "/health": {"ok": True},
@@ -87,4 +96,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("port", type=int)
     args = parser.parse_args()
+    fixture = Path("artifacts/tests/smoke-requests.xlsx")
+    fixture.parent.mkdir(parents=True, exist_ok=True)
+    with ZipFile(fixture, "w") as workbook:
+        workbook.writestr("xl/workbook.xml", '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Requests" sheetId="1" r:id="r1"/></sheets></workbook>')
+        workbook.writestr("xl/_rels/workbook.xml.rels", '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="r1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>')
+        workbook.writestr("xl/worksheets/sheet1.xml", '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Номер заявки</t></is></c><c r="B1" t="inlineStr"><is><t>Статус</t></is></c><c r="C1" t="inlineStr"><is><t>Адрес</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>MANUAL-CLOSED</t></is></c><c r="B2" t="inlineStr"><is><t>closed</t></is></c><c r="C2" t="inlineStr"><is><t>Manual Import Address</t></is></c></row></sheetData></worksheet>')
     ThreadingHTTPServer(("127.0.0.1", args.port), Handler).serve_forever()

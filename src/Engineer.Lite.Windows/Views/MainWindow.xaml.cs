@@ -17,6 +17,7 @@ public sealed partial class MainWindow : Window
     private readonly SessionController? session;
     private readonly WorkspaceController? workspace;
     private readonly ReportWorkspaceView? reportsView;
+    private readonly ProfileWorkspaceView? profileView;
     private readonly ClosedRequestsView? requestsView;
     private bool restored,closed,handlingAuthError;
     private readonly DispatcherTimer refreshTimer=new(){Interval=TimeSpan.FromMinutes(5)};
@@ -29,18 +30,21 @@ public sealed partial class MainWindow : Window
         var version = "Версия " + typeof(App).Assembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version;
         VersionLabel.Text = LoginVersion.Text = version;
         foreach (var section in LiteNavigation.Sections)
-            Navigation.MenuItems.Add(new NavigationViewItem { Content = section.Title, Tag = section.Key, Icon = new SymbolIcon(section.Section == LiteSection.Home ? Symbol.Home : Symbol.List) });
+            Navigation.MenuItems.Add(new NavigationViewItem { Content = section.Title, Tag = section.Key, Icon = new SymbolIcon(section.Section == LiteSection.Profile ? Symbol.Contact : section.Section == LiteSection.Home ? Symbol.Document : Symbol.List) });
         Navigation.SelectedItem = Navigation.MenuItems[0];
         try
         {
             session = SessionFactory.Create();
             workspace=SessionFactory.CreateWorkspace();
-            reportsView=new(this,workspace,CurrentScope,IsOnline,ReconnectAsync,()=>session.App?.User.Email??"");
+            profileView=new(this,workspace,CurrentScope,IsOnline,ReconnectAsync);
+            reportsView=new(this,workspace,CurrentScope,IsOnline,ReconnectAsync,()=>session.App?.User.Email??"",()=>Navigate(LiteSection.Profile));
             requestsView=new(this,workspace,CurrentScope,IsOnline,ReconnectAsync);
             workspace.Changed+=Workspace_Changed;
             session.Changed += Session_Changed;
-            WorkspaceHost.Content=reportsView;SimpleOneCard.Visibility=Visibility.Collapsed;
-            refreshTimer.Tick+=async(_,_)=>{if(!closed&&!workspace.IsBusy&&session.SimpleOneConnection==ConnectionState.Online)await workspace.RefreshClosedAsync();};
+            if(SimpleOneCard.Parent is Panel parent)parent.Children.Remove(SimpleOneCard);
+            requestsView.ConnectionHost.Content=SimpleOneCard;SimpleOneCard.Visibility=Visibility.Visible;
+            WorkspaceHost.Content=profileView;
+            refreshTimer.Tick+=async(_,_)=>{if(!closed&&!workspace.IsClosedBusy&&session.SimpleOneConnection==ConnectionState.Online)await workspace.RefreshClosedAsync();};
             refreshTimer.Start();
             LoginScreen.Loaded += async (_, _) => { if (restored) return; restored = true; await session.RestoreAsync(); RenderSession(); };
             Closed += (_, _) => { closed=true;refreshTimer.Stop();workspace.Cancel();session.CancelPending(); CodeBox.Password = SoPassword.Password = ""; };
@@ -85,11 +89,12 @@ public sealed partial class MainWindow : Window
     {
         SoPassword.Password = ""; SoFields.Visibility = Visibility.Collapsed;
         var section = LiteNavigation.Restore((args.SelectedItem as NavigationViewItem)?.Tag as string);
-        ContentTitle.Text = section == LiteSection.Home ? "Главная" : "Заявки";
+        ContentTitle.Text = LiteNavigation.Sections.First(s=>s.Section==section).Title;
         ContentSummary.Text = section == LiteSection.Home ? "Подготовка месячного ГСМ-отчёта" : "Закрытые заявки: номера и адреса";
-        WorkspaceHost.Content=section==LiteSection.Home?reportsView:requestsView;
-        SimpleOneCard.Visibility=section==LiteSection.ClosedRequests?Visibility.Visible:Visibility.Collapsed;
+        WorkspaceHost.Content=section==LiteSection.Profile?profileView:section==LiteSection.Home?reportsView:requestsView;
+        SimpleOneCard.Visibility=Visibility.Visible;
     }
+    private void Navigate(LiteSection section)=>Navigation.SelectedItem=Navigation.MenuItems.Cast<NavigationViewItem>().First(i=>(string)i.Tag==LiteNavigation.Sections.First(s=>s.Section==section).Key);
     private string CurrentScope()=>closed||session?.App==null?"":session.App.Token+"|"+session.SimpleOne?.AuthKey;
     private bool IsOnline()=>session?.AppConnection==ConnectionState.Online;
     private void Session_Changed()
@@ -103,8 +108,8 @@ public sealed partial class MainWindow : Window
     }
     private async void Workspace_Changed()
     {
-        if(closed||workspace==null||session==null||workspace.IsBusy||session.IsBusy||handlingAuthError)return;
-        if(!workspace.RequiresReauthentication&&!workspace.RequiresSimpleOneReauthentication)return;
+        if(closed||workspace==null||session==null||session.IsBusy||handlingAuthError)return;
+        if(!(workspace.RequiresReauthentication&&!workspace.IsGsmBusy)&&!(workspace.RequiresSimpleOneReauthentication&&!workspace.IsClosedBusy))return;
         handlingAuthError=true;
         try
         {

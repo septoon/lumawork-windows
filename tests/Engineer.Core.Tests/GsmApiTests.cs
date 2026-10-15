@@ -199,7 +199,7 @@ public sealed class GsmApiTests
     {
         using var http = Client(request =>
         {
-            Assert.Equal("4", Assert.Single(request.Headers.GetValues("X-LumaWork-Build")));
+            Assert.Equal("5", Assert.Single(request.Headers.GetValues("X-LumaWork-Build")));
             return ErrorResponse(403, "USER_BLOCKED");
         });
         var error = await Assert.ThrowsAsync<AuthException>(() => new GsmApi(Origin, http).FetchProfileAsync("synthetic"));

@@ -24,7 +24,7 @@
                 </StackPanel>
             </ScrollViewer>
         </Grid>
-        <NavigationView x:Name="Navigation" Visibility="Collapsed" IsBackButtonVisible="Collapsed" IsSettingsVisible="False" PaneDisplayMode="Auto" OpenPaneLength="260" DisplayModeChanged="Navigation_DisplayModeChanged" SelectionChanged="Navigation_SelectionChanged">
+        <NavigationView x:Name="Navigation" Visibility="Collapsed" IsBackButtonVisible="Collapsed" IsSettingsVisible="False" PaneDisplayMode="Auto" OpenPaneLength="232" DisplayModeChanged="Navigation_DisplayModeChanged" SelectionChanged="Navigation_SelectionChanged">
             <NavigationView.PaneHeader>
                 <TextBlock Margin="16,12" Text="Инженер Lite" Style="{ThemeResource SubtitleTextBlockStyle}"/>
             </NavigationView.PaneHeader>
@@ -35,18 +35,18 @@
                 </StackPanel>
             </NavigationView.PaneFooter>
             <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-                <StackPanel Margin="32,24" Spacing="20" MaxWidth="800" HorizontalAlignment="Stretch">
+                <StackPanel Margin="32,24" Spacing="16" MaxWidth="1040" HorizontalAlignment="Left">
                     <TextBlock x:Name="ContentTitle" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap"/>
                     <InfoBar x:Name="SessionWarning" Severity="Warning" IsClosable="False" IsOpen="False">
                         <InfoBar.ActionButton><Button Content="Повторить" Click="Retry_Click"/></InfoBar.ActionButton>
                     </InfoBar>
-                    <TextBlock x:Name="LumaStatus" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <TextBlock x:Name="LumaStatus" Visibility="Collapsed" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                     <TextBlock x:Name="ContentSummary" TextWrapping="Wrap" Visibility="Collapsed"/>
                     <ContentControl x:Name="WorkspaceHost" HorizontalContentAlignment="Stretch"/>
-                    <Border x:Name="SimpleOneCard" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="20">
+                    <Border x:Name="SimpleOneCard">
                         <StackPanel Spacing="12">
                             <TextBlock Text="SimpleOne" Style="{ThemeResource SubtitleTextBlockStyle}"/>
-                            <TextBlock Text="Отдельный вход для доступа к закрытым заявкам." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <TextBlock Text="Подключение для автоматической загрузки закрытых заявок. Для импорта файла вход не нужен." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             <StackPanel x:Name="SoConnected" Visibility="Collapsed" Spacing="12">
                                 <TextBlock x:Name="SoIdentity" TextWrapping="Wrap"/>
                                 <Button x:Name="SoLogoutButton" Content="Выйти из SimpleOne" Click="SoLogout_Click"/>
