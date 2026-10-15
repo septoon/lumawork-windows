@@ -9,7 +9,7 @@
     <AssemblyName>Инженер Lite</AssemblyName>
     <AssemblyTitle>Инженер Lite</AssemblyTitle>
     <Product>Инженер Lite</Product>
-    <FileVersion>0.1.0.2</FileVersion>
+    <FileVersion>0.1.0.3</FileVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets/AppIcon.ico</ApplicationIcon>
     <Platforms>x64</Platforms>

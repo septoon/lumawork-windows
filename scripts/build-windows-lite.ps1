@@ -82,12 +82,21 @@ try {
     if (-not (Test-Path (Join-Path $outputPath 'Инженер Lite.exe'))) {
         throw 'Build завершился, но ожидаемый WinUI executable отсутствует.'
     }
-    $artifactOutputPath = Join-Path $artifactsPath 'windows-lite'
+    $artifactOutputPath = Join-Path $artifactsPath 'portable/app'
     if (Test-Path $artifactOutputPath) {
         Remove-Item -Path $artifactOutputPath -Recurse -Force
     }
     New-Item -ItemType Directory -Force -Path $artifactOutputPath | Out-Null
     Copy-Item -Path (Join-Path $outputPath '*') -Destination $artifactOutputPath -Recurse -Force
+    # Debug symbols and CI logs are diagnostics, not user-facing release files.
+    Get-ChildItem -Path $artifactOutputPath -Recurse -Filter '*.pdb' | Remove-Item -Force
+    Invoke-Native $msbuildPath @('src/Engineer.Lite.Launcher/Engineer.Lite.Launcher.vcxproj', '/t:Build', '/p:Configuration=Release', '/p:Platform=x64', '/nologo')
+    $launcherPath = Join-Path $repoRoot 'src/Engineer.Lite.Launcher/bin/x64/Release/Инженер Lite.exe'
+    if (-not (Test-Path $launcherPath)) { throw 'Не собран EXE запуска приложения.' }
+    Copy-Item -Path $launcherPath -Destination (Join-Path $artifactsPath 'portable/Инженер Lite.exe') -Force
+    $releasePath = Join-Path $artifactsPath 'release'
+    New-Item -ItemType Directory -Force -Path $releasePath | Out-Null
+    Compress-Archive -Path (Join-Path $artifactsPath 'portable/*') -DestinationPath (Join-Path $releasePath 'EngineerLite-Windows-x64.zip') -Force
 } finally {
     Pop-Location
 }

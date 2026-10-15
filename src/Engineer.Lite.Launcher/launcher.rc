@@ -1,0 +1,23 @@
+#pragma code_page(65001)
+#include <windows.h>
+1 ICON "../Engineer.Lite.Windows/Assets/AppIcon.ico"
+1 VERSIONINFO
+ FILEVERSION 0,1,0,3
+ PRODUCTVERSION 0,1,0,3
+ FILETYPE VFT_APP
+BEGIN
+ BLOCK "StringFileInfo"
+ BEGIN
+  BLOCK "041904B0"
+  BEGIN
+   VALUE "FileDescription", "Инженер Lite\0"
+   VALUE "ProductName", "Инженер Lite\0"
+   VALUE "FileVersion", "0.1.0.3\0"
+   VALUE "ProductVersion", "0.1.0.3\0"
+  END
+ END
+ BLOCK "VarFileInfo"
+ BEGIN
+  VALUE "Translation", 0x419, 1200
+ END
+END

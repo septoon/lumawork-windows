@@ -49,11 +49,24 @@ jobs:
       - name: Test core and build WinUI
         shell: pwsh
         run: ./scripts/build-windows-lite.ps1 -Configuration Release -Portable
-      - name: Upload build and diagnostics
+      - name: Verify launcher and login screen
+        shell: powershell
+        run: ./scripts/test-windows-startup.ps1
+      - name: Upload application ZIP
+        if: success()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: EngineerLite-Windows-x64
+          path: artifacts/release/EngineerLite-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: windows-lite-portable-x64-${{ github.run_number }}
-          path: artifacts/
+          name: windows-lite-diagnostics-${{ github.run_number }}
+          path: |
+            artifacts/*.binlog
+            artifacts/tests/
           if-no-files-found: warn
           retention-days: 7
