@@ -1,81 +1,78 @@
-<Window
-    x:Class="Engineer.Lite.Windows.Views.MainWindow"
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="Engineer.Lite.Windows.Views.MainWindow">
     <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <Grid x:Name="LoginScreen" Padding="24">
             <ScrollViewer HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Width="400" MaxWidth="400" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16" Padding="0,32">
-                    <Image Source="ms-appx:///Assets/Square150x150Logo.png" Width="72" Height="72" HorizontalAlignment="Left" />
-                    <TextBlock Text="Инженер Lite" Style="{ThemeResource TitleTextBlockStyle}" />
-                    <TextBlock Text="Вход в LumaWork" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                    <TextBlock Text="Введите рабочую почту. Мы отправим код для входа." TextWrapping="Wrap" />
-                    <StackPanel x:Name="LoginFields" Spacing="12">
-                        <TextBox x:Name="EmailBox" Header="Рабочая почта" PlaceholderText="name@example.ru" InputScope="EmailSmtpAddress" KeyDown="Login_KeyDown" />
-                        <PasswordBox x:Name="CodeBox" Header="Код из письма" MaxLength="6" Visibility="Collapsed" KeyDown="Login_KeyDown" />
-                        <TextBlock x:Name="CodeHint" Visibility="Collapsed" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <Button x:Name="LoginButton" Content="Получить код" Click="Login_Click" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch" />
+                    <Image Source="ms-appx:///Assets/Square150x150Logo.png" Width="72" Height="72" HorizontalAlignment="Left"/>
+                    <TextBlock Text="Инженер Lite" Style="{ThemeResource TitleTextBlockStyle}"/>
+                    <TextBlock Text="Вход в LumaWork" Style="{ThemeResource SubtitleTextBlockStyle}"/>
+                    <TextBlock Text="Введите рабочую почту. Мы отправим код для входа." TextWrapping="Wrap"/>
+                    <ContentControl x:Name="LoginFields" HorizontalContentAlignment="Stretch"><StackPanel Spacing="12">
+                        <TextBox x:Name="EmailBox" Header="Рабочая почта" PlaceholderText="name@example.ru" InputScope="EmailSmtpAddress" KeyDown="Login_KeyDown"/>
+                        <PasswordBox x:Name="CodeBox" Header="Код из письма" MaxLength="6" Visibility="Collapsed" KeyDown="Login_KeyDown"/>
+                        <TextBlock x:Name="CodeHint" Visibility="Collapsed" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <Button x:Name="LoginButton" Content="Получить код" Click="Login_Click" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch"/>
                         <StackPanel x:Name="CodeActions" Orientation="Horizontal" Spacing="12" Visibility="Collapsed">
-                            <Button Content="Другая почта" Click="ChangeEmail_Click" />
-                            <Button Content="Отправить снова" Click="Resend_Click" />
+                            <Button Content="Другая почта" Click="ChangeEmail_Click"/>
+                            <Button Content="Отправить снова" Click="Resend_Click"/>
                         </StackPanel>
-                    </StackPanel>
-                    <ProgressRing x:Name="LoginProgress" IsActive="False" Width="24" Height="24" HorizontalAlignment="Left" Visibility="Collapsed" />
-                    <InfoBar x:Name="LoginError" IsOpen="False" Severity="Error" IsClosable="False" />
-                    <Button x:Name="RestoreRetry" Content="Повторить подключение" Visibility="Collapsed" Click="Retry_Click" />
-                    <TextBlock x:Name="LoginVersion" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel></ContentControl>
+                    <ProgressRing x:Name="LoginProgress" IsActive="False" Width="24" Height="24" HorizontalAlignment="Left" Visibility="Collapsed"/>
+                    <InfoBar x:Name="LoginError" IsOpen="False" Severity="Error" IsClosable="False"/>
+                    <Button x:Name="RestoreRetry" Content="Повторить подключение" Visibility="Collapsed" Click="Retry_Click"/>
+                    <TextBlock x:Name="LoginVersion" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>
             </ScrollViewer>
         </Grid>
         <NavigationView x:Name="Navigation" Visibility="Collapsed" IsBackButtonVisible="Collapsed" IsSettingsVisible="False" PaneDisplayMode="Auto" SelectionChanged="Navigation_SelectionChanged">
             <NavigationView.PaneHeader>
-                <TextBlock Margin="16,12" Text="Инженер Lite" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                <TextBlock Margin="16,12" Text="Инженер Lite" Style="{ThemeResource SubtitleTextBlockStyle}"/>
             </NavigationView.PaneHeader>
             <NavigationView.PaneFooter>
                 <StackPanel Margin="16" Spacing="8">
-                    <TextBlock x:Name="AccountEmail" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" />
-                    <Button x:Name="LogoutButton" Content="Выйти из LumaWork" Click="Logout_Click" />
+                    <TextBlock x:Name="AccountEmail" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                    <Button x:Name="LogoutButton" Content="Выйти из LumaWork" Click="Logout_Click"/>
                 </StackPanel>
             </NavigationView.PaneFooter>
             <ScrollViewer HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Margin="32,24" Spacing="20" MaxWidth="800" HorizontalAlignment="Stretch">
-                    <TextBlock x:Name="ContentTitle" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" />
+                    <TextBlock x:Name="ContentTitle" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap"/>
                     <InfoBar x:Name="SessionWarning" Severity="Warning" IsClosable="False" IsOpen="False">
-                        <InfoBar.ActionButton><Button Content="Повторить" Click="Retry_Click" /></InfoBar.ActionButton>
+                        <InfoBar.ActionButton><Button Content="Повторить" Click="Retry_Click"/></InfoBar.ActionButton>
                     </InfoBar>
                     <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="20">
                         <StackPanel Spacing="12">
-                            <TextBlock Text="LumaWork" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                            <TextBlock x:Name="LumaStatus" TextWrapping="Wrap" />
-                            <TextBlock x:Name="ContentSummary" TextWrapping="Wrap" />
-                            <TextBlock x:Name="ContentState" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="LumaWork" Style="{ThemeResource SubtitleTextBlockStyle}"/>
+                            <TextBlock x:Name="LumaStatus" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="ContentSummary" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="ContentState" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                         </StackPanel>
                     </Border>
                     <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="20">
                         <StackPanel Spacing="12">
-                            <TextBlock Text="SimpleOne" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                            <TextBlock Text="Отдельный вход для доступа к закрытым заявкам." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="SimpleOne" Style="{ThemeResource SubtitleTextBlockStyle}"/>
+                            <TextBlock Text="Отдельный вход для доступа к закрытым заявкам." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             <StackPanel x:Name="SoConnected" Visibility="Collapsed" Spacing="12">
-                                <TextBlock x:Name="SoIdentity" TextWrapping="Wrap" />
-                                <Button x:Name="SoLogoutButton" Content="Выйти из SimpleOne" Click="SoLogout_Click" />
+                                <TextBlock x:Name="SoIdentity" TextWrapping="Wrap"/>
+                                <Button x:Name="SoLogoutButton" Content="Выйти из SimpleOne" Click="SoLogout_Click"/>
                             </StackPanel>
                             <StackPanel x:Name="SoDisconnected" Spacing="12">
-                                <Button x:Name="SoOpenButton" Content="Войти в SimpleOne" Click="SoOpen_Click" />
-                                <StackPanel x:Name="SoFields" Visibility="Collapsed" Spacing="12" MaxWidth="400" HorizontalAlignment="Left">
-                                    <TextBox x:Name="SoUsername" Header="Логин SimpleOne" PlaceholderText="Логин" KeyDown="So_KeyDown" MinWidth="240" />
-                                    <PasswordBox x:Name="SoPassword" Header="Пароль" KeyDown="So_KeyDown" />
-                                    <TextBlock Text="Пароль используется только для входа и не сохраняется." TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" />
+                                <Button x:Name="SoOpenButton" Content="Войти в SimpleOne" Click="SoOpen_Click"/>
+                                <ContentControl x:Name="SoFields" Visibility="Collapsed" MaxWidth="400" HorizontalAlignment="Left" HorizontalContentAlignment="Stretch"><StackPanel Spacing="12">
+                                    <TextBox x:Name="SoUsername" Header="Логин SimpleOne" PlaceholderText="Логин" KeyDown="So_KeyDown" MinWidth="240"/>
+                                    <PasswordBox x:Name="SoPassword" Header="Пароль" KeyDown="So_KeyDown"/>
+                                    <TextBlock Text="Пароль используется только для входа и не сохраняется." TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"/>
                                     <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <Button Content="Подключиться" Style="{StaticResource AccentButtonStyle}" Click="SoLogin_Click" />
-                                        <Button Content="Отмена" Click="SoCancel_Click" />
+                                        <Button Content="Подключиться" Style="{StaticResource AccentButtonStyle}" Click="SoLogin_Click"/>
+                                        <Button Content="Отмена" Click="SoCancel_Click"/>
                                     </StackPanel>
-                                </StackPanel>
+                                </StackPanel></ContentControl>
                             </StackPanel>
-                            <InfoBar x:Name="SoError" IsOpen="False" Severity="Warning" IsClosable="False" />
-                            <ProgressRing x:Name="SoProgress" IsActive="False" Width="24" Height="24" HorizontalAlignment="Left" Visibility="Collapsed" />
+                            <InfoBar x:Name="SoError" IsOpen="False" Severity="Warning" IsClosable="False"/>
+                            <ProgressRing x:Name="SoProgress" IsActive="False" Width="24" Height="24" HorizontalAlignment="Left" Visibility="Collapsed"/>
                         </StackPanel>
                     </Border>
-                    <TextBlock x:Name="VersionLabel" Style="{ThemeResource CaptionTextBlockStyle}" />
+                    <TextBlock x:Name="VersionLabel" Style="{ThemeResource CaptionTextBlockStyle}"/>
                 </StackPanel>
             </ScrollViewer>
         </NavigationView>
