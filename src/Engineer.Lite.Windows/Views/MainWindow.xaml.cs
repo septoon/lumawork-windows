@@ -41,7 +41,7 @@ public sealed partial class MainWindow : Window
             requestsView=new(this,workspace,CurrentScope,IsOnline,ReconnectAsync);
             workspace.Changed+=Workspace_Changed;
             session.Changed += Session_Changed;
-            if(SimpleOneCard.Parent is Panel parent)parent.Children.Remove(SimpleOneCard);
+            PageContent.Children.Remove(SimpleOneCard);
             requestsView.ConnectionHost.Content=SimpleOneCard;SimpleOneCard.Visibility=Visibility.Visible;
             WorkspaceHost.Content=profileView;
             refreshTimer.Tick+=async(_,_)=>{if(!closed&&!workspace.IsClosedBusy&&session.SimpleOneConnection==ConnectionState.Online)await workspace.RefreshClosedAsync();};

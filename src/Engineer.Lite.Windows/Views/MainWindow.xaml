@@ -35,7 +35,7 @@
                 </StackPanel>
             </NavigationView.PaneFooter>
             <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-                <StackPanel Margin="32,24" Spacing="16" MaxWidth="1040" HorizontalAlignment="Left">
+                <StackPanel x:Name="PageContent" Margin="32,24" Spacing="16" MaxWidth="1040" HorizontalAlignment="Left">
                     <TextBlock x:Name="ContentTitle" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap"/>
                     <InfoBar x:Name="SessionWarning" Severity="Warning" IsClosable="False" IsOpen="False">
                         <InfoBar.ActionButton><Button Content="Повторить" Click="Retry_Click"/></InfoBar.ActionButton>
